@@ -92,6 +92,7 @@ target_sources(app PRIVATE
     src/model/user_settings.c
     src/model/crash_recovery.c
     src/model/parcours.c
+    src/model/baro_drift.c
 )
 
 # RF Layer - Wireless Communication
