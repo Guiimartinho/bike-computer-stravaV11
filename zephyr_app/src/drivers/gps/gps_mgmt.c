@@ -47,6 +47,16 @@ static uint32_t last_fix_time;
 /** NMEA data from parser */
 static nmea_data_t nmea_data;
 
+/** EPO/AGPS state */
+static gps_epo_state_t epo_state = GPS_EPO_IDLE;
+
+/** Host aiding timestamp */
+static uint32_t host_aiding_time;
+
+/** Last known position for auto-aiding */
+static loc_data_t last_known_pos;
+static bool has_last_known_pos;
+
 /* ==========================================================================
  * Private Functions
  * ========================================================================== */
@@ -398,4 +408,141 @@ bool gps_mgmt_check_fix_pin(void)
     bool state = false;
     (void)hal_gpio_get(HAL_GPIO_GPS_FIX, &state);
     return state;
+}
+
+/* ==========================================================================
+ * EPO / Host Aiding Functions (AGPS)
+ * ========================================================================== */
+
+app_err_t gps_mgmt_host_aiding(const loc_data_t *loc, const date_data_t *date)
+{
+    if (!is_initialized) {
+        return APP_ERR_NOT_INIT;
+    }
+
+    if ((loc == NULL) || (date == NULL)) {
+        return APP_ERR_INVALID_PARAM;
+    }
+
+    /* Validate position */
+    if ((loc->lat == 0.0f) && (loc->lon == 0.0f)) {
+        LOG_WRN("Invalid position for host aiding");
+        return APP_ERR_INVALID_PARAM;
+    }
+
+    /* Build PMTK741 command for MediaTek GPS
+     * Format: $PMTK741,lat,lon,alt,year,month,day,hour,minute,second*CS
+     *
+     * This provides the GPS with approximate position and time to
+     * significantly reduce time-to-first-fix (TTFF)
+     */
+    char cmd[128];
+
+    /* Extract date components (DDMMYY format) */
+    uint32_t day = date->date / 10000U;
+    uint32_t month = (date->date / 100U) % 100U;
+    uint32_t year = 2000U + (date->date % 100U);
+
+    /* Extract time components (seconds of day) */
+    uint32_t hours = date->secj / 3600U;
+    uint32_t minutes = (date->secj / 60U) % 60U;
+    uint32_t seconds = date->secj % 60U;
+
+    /* Build command without checksum first */
+    int len = snprintf(cmd, sizeof(cmd) - 6,
+                       "PMTK741,%.6f,%.6f,%d,%u,%u,%u,%02u,%02u,%02u",
+                       (double)loc->lat, (double)loc->lon, (int)loc->alt,
+                       (unsigned)year, (unsigned)month, (unsigned)day,
+                       (unsigned)hours, (unsigned)minutes, (unsigned)seconds);
+
+    if (len <= 0) {
+        return APP_ERR_INTERNAL;
+    }
+
+    /* Calculate checksum */
+    uint8_t checksum = nmea_calculate_checksum(cmd);
+
+    /* Build final command with start, checksum and end */
+    char final_cmd[140];
+    len = snprintf(final_cmd, sizeof(final_cmd), "$%s*%02X\r\n", cmd, checksum);
+
+    if (len <= 0) {
+        return APP_ERR_INTERNAL;
+    }
+
+    /* Send to GPS module */
+    app_err_t err = hal_uart_transmit_str(HAL_UART_GPS, final_cmd);
+    if (err != APP_OK) {
+        LOG_ERR("Failed to send host aiding command");
+        return err;
+    }
+
+    host_aiding_time = k_uptime_get_32();
+
+    LOG_INF("Host aiding sent: %.4f, %.4f, %dm",
+            (double)loc->lat, (double)loc->lon, (int)loc->alt);
+
+    return APP_OK;
+}
+
+app_err_t gps_mgmt_start_epo(const uint8_t *epo_data, uint32_t epo_size)
+{
+    if (!is_initialized) {
+        return APP_ERR_NOT_INIT;
+    }
+
+    if ((epo_data == NULL) || (epo_size == 0U)) {
+        return APP_ERR_INVALID_PARAM;
+    }
+
+    /* EPO transfer is module-specific and typically requires
+     * a binary protocol. This is a placeholder for the MediaTek
+     * EPO upload sequence which would involve:
+     * 1. Send PMTK253 to enable EPO function
+     * 2. Send EPO data in binary format
+     * 3. Wait for ACK
+     */
+
+    epo_state = GPS_EPO_START;
+    LOG_INF("EPO transfer started (%u bytes)", (unsigned)epo_size);
+
+    /* For now, just indicate EPO is not supported in this build */
+    LOG_WRN("EPO binary transfer not implemented");
+    epo_state = GPS_EPO_END;
+
+    return APP_ERR_NOT_INIT; /* Indicate not fully implemented */
+}
+
+gps_epo_state_t gps_mgmt_get_epo_state(void)
+{
+    return epo_state;
+}
+
+bool gps_mgmt_is_aiding_active(void)
+{
+    if (host_aiding_time == 0U) {
+        return false;
+    }
+
+    /* Aiding is considered active for 60 seconds after sending */
+    uint32_t age = k_uptime_get_32() - host_aiding_time;
+    return (age < 60000U);
+}
+
+void gps_mgmt_set_last_position(const loc_data_t *loc)
+{
+    if (loc == NULL) {
+        return;
+    }
+
+    /* Validate position */
+    if ((loc->lat == 0.0f) && (loc->lon == 0.0f)) {
+        return;
+    }
+
+    last_known_pos = *loc;
+    has_last_known_pos = true;
+
+    LOG_INF("Last known position stored: %.4f, %.4f",
+            (double)loc->lat, (double)loc->lon);
 }

@@ -156,6 +156,61 @@ uint8_t gps_mgmt_get_satellites(void);
  */
 bool gps_mgmt_check_fix_pin(void);
 
+/* ==========================================================================
+ * EPO / Host Aiding Functions (AGPS)
+ * ========================================================================== */
+
+/** EPO state */
+typedef enum {
+    GPS_EPO_IDLE = 0,       /**< EPO idle */
+    GPS_EPO_START,          /**< Starting EPO transfer */
+    GPS_EPO_RUNNING,        /**< EPO transfer in progress */
+    GPS_EPO_WAIT_EVENT,     /**< Waiting for GPS response */
+    GPS_EPO_END             /**< EPO transfer complete */
+} gps_epo_state_t;
+
+/**
+ * @brief Send host aiding data to GPS module
+ *
+ * Provides known position and time to GPS for faster cold start (AGPS).
+ * Position typically comes from BLE LNS service or last known location.
+ *
+ * @param loc Known location data
+ * @param date Known date/time data
+ * @return APP_OK on success, error code otherwise
+ */
+app_err_t gps_mgmt_host_aiding(const loc_data_t *loc, const date_data_t *date);
+
+/**
+ * @brief Start EPO data transfer
+ *
+ * EPO (Extended Prediction Orbit) provides satellite ephemeris data
+ * for faster time-to-first-fix.
+ *
+ * @param epo_data Pointer to EPO data buffer
+ * @param epo_size Size of EPO data in bytes
+ * @return APP_OK on success, error code otherwise
+ */
+app_err_t gps_mgmt_start_epo(const uint8_t *epo_data, uint32_t epo_size);
+
+/**
+ * @brief Get current EPO state
+ * @return Current EPO state
+ */
+gps_epo_state_t gps_mgmt_get_epo_state(void);
+
+/**
+ * @brief Check if host aiding is active
+ * @return true if host aiding was sent recently
+ */
+bool gps_mgmt_is_aiding_active(void);
+
+/**
+ * @brief Set last known position for auto-aiding on startup
+ * @param loc Last known location
+ */
+void gps_mgmt_set_last_position(const loc_data_t *loc);
+
 #ifdef __cplusplus
 }
 #endif
