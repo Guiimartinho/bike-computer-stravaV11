@@ -1,0 +1,26 @@
+# local and personal definitions
+# Configurado para usar toolchain do nRF Connect SDK
+
+ifeq ($(OS),Windows_NT)
+    # Windows - nRF5 SDK path
+    SDK_ROOT := C:/Nordic/nRF5_SDK_17.1.0
+    OUTPUT_DIRECTORY := _build_W
+    COM_PORT := COM8
+
+    # Toolchain do nRF Connect SDK (Zephyr SDK)
+    # Usar arm-zephyr-eabi em vez de arm-none-eabi
+    ZEPHYR_TOOLCHAIN := C:/ncs/toolchains/b8b84efebd/opt/zephyr-sdk/arm-zephyr-eabi
+    GNU_INSTALL_ROOT := $(ZEPHYR_TOOLCHAIN)/bin/
+    GNU_PREFIX := arm-zephyr-eabi
+    GNU_VERSION := 12.2.0
+else
+    # Linux/WSL
+    SDK_ROOT := /mnt/c/Nordic/nRF5_SDK_17.1.0
+    OUTPUT_DIRECTORY := _build_L
+    COM_PORT := /dev/ttyACM0
+
+    ZEPHYR_TOOLCHAIN := /c/ncs/toolchains/b8b84efebd/opt/zephyr-sdk/arm-zephyr-eabi
+    GNU_INSTALL_ROOT := $(ZEPHYR_TOOLCHAIN)/bin/
+    GNU_PREFIX := arm-zephyr-eabi
+    GNU_VERSION := 12.2.0
+endif

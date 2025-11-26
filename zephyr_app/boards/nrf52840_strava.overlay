@@ -1,0 +1,245 @@
+/*
+ * Device Tree Overlay for stravaV10 Custom Board
+ * Based on nRF52840 - Bike GPS Computer
+ *
+ * Pin Mapping (from custom_board_v3.h):
+ * - I2C: SDA=P1.00, SCL=P1.01
+ * - UART (GPS): TX=P0.05, RX=P0.07
+ * - SPI LCD: MOSI=P0.16, SCK=P0.15, CS=P0.17
+ * - SPI SDC: MOSI=P0.25, SCK=P0.27, MISO=P0.28, CS=P0.26
+ * - Buttons: B1=P0.14, B2=P0.13, B3=P0.11
+ * - LED: P1.04
+ * - GPS: RST=P0.03, STDBY=P1.15, FIX=P1.14
+ * - IMU: INT1=P1.02, RST=P1.03
+ * - Neopixel: P1.13
+ */
+
+/ {
+    chosen {
+        zephyr,display = &ls027;
+    };
+
+    aliases {
+        led0 = &led0;
+        sw0 = &button0;
+        sw1 = &button1;
+        sw2 = &button2;
+        gps-uart = &uart1;
+        lcd-spi = &spi1;
+        sdc-spi = &spi2;
+        sensor-i2c = &i2c0;
+    };
+
+    leds {
+        compatible = "gpio-leds";
+        led0: led_0 {
+            gpios = <&gpio1 4 GPIO_ACTIVE_LOW>;
+            label = "Status LED";
+        };
+    };
+
+    buttons {
+        compatible = "gpio-keys";
+        button0: button_0 {
+            gpios = <&gpio0 14 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+            label = "Button Left";
+        };
+        button1: button_1 {
+            gpios = <&gpio0 13 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+            label = "Button Center";
+        };
+        button2: button_2 {
+            gpios = <&gpio0 11 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+            label = "Button Right";
+        };
+    };
+
+    /* GPS Control Pins */
+    gps_ctrl {
+        compatible = "gpio-keys";
+        gps_reset: gps_reset {
+            gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+            label = "GPS Reset";
+        };
+        gps_stdby: gps_stdby {
+            gpios = <&gpio1 15 GPIO_ACTIVE_HIGH>;
+            label = "GPS Standby";
+        };
+        gps_fix: gps_fix {
+            gpios = <&gpio1 14 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
+            label = "GPS Fix";
+        };
+    };
+
+    /* IMU Control Pins */
+    imu_ctrl {
+        compatible = "gpio-keys";
+        imu_int1: imu_int1 {
+            gpios = <&gpio1 2 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
+            label = "IMU INT1";
+        };
+        imu_reset: imu_reset {
+            gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
+            label = "IMU Reset";
+        };
+    };
+
+    /* Neopixel */
+    neopixel_pin {
+        compatible = "gpio-keys";
+        neo_data: neo_data {
+            gpios = <&gpio1 13 GPIO_ACTIVE_HIGH>;
+            label = "Neopixel Data";
+        };
+    };
+};
+
+/* I2C0 - Sensors (Barometer, IMU, Fuel Gauge) */
+&i2c0 {
+    compatible = "nordic,nrf-twi";
+    status = "okay";
+    pinctrl-0 = <&i2c0_default>;
+    pinctrl-1 = <&i2c0_sleep>;
+    pinctrl-names = "default", "sleep";
+    clock-frequency = <I2C_BITRATE_FAST>;
+
+    /* BMP280/BME280 Barometer */
+    baro: bmp280@76 {
+        compatible = "bosch,bme280";
+        reg = <0x76>;
+        label = "BARO";
+    };
+
+    /* FXOS8700 Accelerometer/Magnetometer */
+    fxos: fxos8700@1e {
+        compatible = "nxp,fxos8700";
+        reg = <0x1e>;
+        label = "FXOS";
+        int1-gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
+    };
+
+    /* STC3100 Fuel Gauge */
+    stc3100: stc3100@70 {
+        compatible = "st,stc3100";
+        reg = <0x70>;
+        label = "STC3100";
+    };
+};
+
+/* UART1 - GPS Module */
+&uart1 {
+    compatible = "nordic,nrf-uarte";
+    status = "okay";
+    current-speed = <9600>;
+    pinctrl-0 = <&uart1_default>;
+    pinctrl-1 = <&uart1_sleep>;
+    pinctrl-names = "default", "sleep";
+};
+
+/* SPI1 - LCD LS027 */
+&spi1 {
+    compatible = "nordic,nrf-spim";
+    status = "okay";
+    pinctrl-0 = <&spi1_default>;
+    pinctrl-1 = <&spi1_sleep>;
+    pinctrl-names = "default", "sleep";
+    cs-gpios = <&gpio0 17 GPIO_ACTIVE_HIGH>;
+
+    ls027: ls027b4dh01@0 {
+        compatible = "sharp,ls0xx";
+        reg = <0>;
+        spi-max-frequency = <2000000>;
+        label = "LS027";
+        width = <400>;
+        height = <240>;
+    };
+};
+
+/* SPI2 - SD Card */
+&spi2 {
+    compatible = "nordic,nrf-spim";
+    status = "okay";
+    pinctrl-0 = <&spi2_default>;
+    pinctrl-1 = <&spi2_sleep>;
+    pinctrl-names = "default", "sleep";
+    cs-gpios = <&gpio0 26 GPIO_ACTIVE_LOW>;
+
+    sdhc0: sdhc@0 {
+        compatible = "zephyr,sdhc-spi-slot";
+        reg = <0>;
+        spi-max-frequency = <8000000>;
+        label = "SDHC0";
+        mmc {
+            compatible = "zephyr,sdmmc-disk";
+            status = "okay";
+        };
+    };
+};
+
+/* Pin Control */
+&pinctrl {
+    i2c0_default: i2c0_default {
+        group1 {
+            psels = <NRF_PSEL(TWIM_SDA, 1, 0)>,
+                    <NRF_PSEL(TWIM_SCL, 1, 1)>;
+        };
+    };
+
+    i2c0_sleep: i2c0_sleep {
+        group1 {
+            psels = <NRF_PSEL(TWIM_SDA, 1, 0)>,
+                    <NRF_PSEL(TWIM_SCL, 1, 1)>;
+            low-power-enable;
+        };
+    };
+
+    uart1_default: uart1_default {
+        group1 {
+            psels = <NRF_PSEL(UART_TX, 0, 5)>;
+        };
+        group2 {
+            psels = <NRF_PSEL(UART_RX, 0, 7)>;
+            bias-pull-up;
+        };
+    };
+
+    uart1_sleep: uart1_sleep {
+        group1 {
+            psels = <NRF_PSEL(UART_TX, 0, 5)>,
+                    <NRF_PSEL(UART_RX, 0, 7)>;
+            low-power-enable;
+        };
+    };
+
+    spi1_default: spi1_default {
+        group1 {
+            psels = <NRF_PSEL(SPIM_SCK, 0, 15)>,
+                    <NRF_PSEL(SPIM_MOSI, 0, 16)>;
+        };
+    };
+
+    spi1_sleep: spi1_sleep {
+        group1 {
+            psels = <NRF_PSEL(SPIM_SCK, 0, 15)>,
+                    <NRF_PSEL(SPIM_MOSI, 0, 16)>;
+            low-power-enable;
+        };
+    };
+
+    spi2_default: spi2_default {
+        group1 {
+            psels = <NRF_PSEL(SPIM_SCK, 0, 27)>,
+                    <NRF_PSEL(SPIM_MOSI, 0, 25)>,
+                    <NRF_PSEL(SPIM_MISO, 0, 28)>;
+        };
+    };
+
+    spi2_sleep: spi2_sleep {
+        group1 {
+            psels = <NRF_PSEL(SPIM_SCK, 0, 27)>,
+                    <NRF_PSEL(SPIM_MOSI, 0, 25)>,
+                    <NRF_PSEL(SPIM_MISO, 0, 28)>;
+            low-power-enable;
+        };
+    };
+};

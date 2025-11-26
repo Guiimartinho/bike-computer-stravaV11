@@ -8,3 +8,6 @@ CMakeFiles/
 *.xml
 /TEST/
 node_modules/
+
+# Claude Code settings
+.claude/

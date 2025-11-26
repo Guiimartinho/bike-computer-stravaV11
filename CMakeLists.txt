@@ -38,28 +38,29 @@ add_compile_options(-msse2 -mno-ms-bitfields)
 add_definitions(-DWIN32)
 add_definitions(-D_WIN32_WINNT=0x0600)
 add_definitions(-DWINVER=0x600)
-include_directories(./TDDW)
+include_directories(./tools/TDDW)
 endif()
 
 
 # On inclut notre bibliotheque dans le processus de CMake
 # add_subdirectory(source/routes)
-add_subdirectory(TDD/sd/fatfs)
+add_subdirectory(tools/TDD/sd/fatfs)
 
 
 # add the binary tree to the search path for include files
 include_directories(
     ./
-	TDD
-	TDD/sd
-	TDD/sd/fatfs/src
-	TDD/drivers
-    TDD/logger
-	TDD/nordic
-	TDD/timer
-	TDD/sensors
-	TDD/scheduler
-	TDD/sys
+    ./legacy
+	tools/TDD
+	tools/TDD/sd
+	tools/TDD/sd/fatfs/src
+	tools/TDD/drivers
+    tools/TDD/logger
+	tools/TDD/nordic
+	tools/TDD/timer
+	tools/TDD/sensors
+	tools/TDD/scheduler
+	tools/TDD/sys
 	libraries/AdafruitGFX
     libraries/AdafruitGFX/Fonts
 	libraries/AltiBaro
@@ -70,46 +71,46 @@ include_directories(
     libraries/kalman
 	libraries/TinyGPSPlus
 	libraries/VParser
-	rf
-    source
-    source/routes
-	source/model
-	source/usb
-	source/scheduling
-	source/vue
-	source/parsers
-	source/display
-	source/sensors
+	legacy/rf
+    legacy/source
+    legacy/source/routes
+	legacy/source/model
+	legacy/source/usb
+	legacy/source/scheduling
+	legacy/source/vue
+	legacy/source/parsers
+	legacy/source/display
+	legacy/source/sensors
     )
 
 
-aux_source_directory(TDD/nordic                   NORDIC)
+aux_source_directory(tools/TDD/nordic                   NORDIC)
 
 # Cree des variables avec les fichiers a compiler
 set(SRCS
-    TDD/main_tdd.cpp
-    TDD/scheduler/task_scheduler.c
-    TDD/unit_testing.cpp
-	TDD/Model_tdd.cpp
-    TDD/Simulator.cpp
-	TDD/millis_tdd.c
-	TDD/order1_filter_tdd.c
-	TDD/sd/sd_hal.c
-	TDD/timer/timer.c
-    TDD/sensors/STC3100.cpp
-    TDD/sensors/fxos.cpp
-    TDD/sensors/bme280.c
-	TDD/sensors/VEML6075.cpp
-	TDD/drivers/uart_tdd.c
-	TDD/drivers/ant_tdd.c
-	TDD/drivers/drv_ws2812.c
-	TDD/drivers/gpio_tdd.cpp
-	TDD/drivers/ls027_tdd.cpp
-	TDD/drivers/neopixel_tdd.c
-    TDD/logger/tdd_logger.c
-    TDD/sys/GUI_connector.cpp
-    segger_wrapper.c
-    rf/ant_device_manager.cpp
+    tools/TDD/main_tdd.cpp
+    tools/TDD/scheduler/task_scheduler.c
+    tools/TDD/unit_testing.cpp
+	tools/TDD/Model_tdd.cpp
+    tools/TDD/Simulator.cpp
+	tools/TDD/millis_tdd.c
+	tools/TDD/order1_filter_tdd.c
+	tools/TDD/sd/sd_hal.c
+	tools/TDD/timer/timer.c
+    tools/TDD/sensors/STC3100.cpp
+    tools/TDD/sensors/fxos.cpp
+    tools/TDD/sensors/bme280.c
+	tools/TDD/sensors/VEML6075.cpp
+	tools/TDD/drivers/uart_tdd.c
+	tools/TDD/drivers/ant_tdd.c
+	tools/TDD/drivers/drv_ws2812.c
+	tools/TDD/drivers/gpio_tdd.cpp
+	tools/TDD/drivers/ls027_tdd.cpp
+	tools/TDD/drivers/neopixel_tdd.c
+    tools/TDD/logger/tdd_logger.c
+    tools/TDD/sys/GUI_connector.cpp
+    legacy/segger_wrapper.c
+    legacy/rf/ant_device_manager.cpp
 	libraries/utils/WString.cpp
 	libraries/AdafruitGFX/Adafruit_GFX.cpp
 	libraries/AdafruitGFX/Print.cpp
@@ -121,39 +122,39 @@ set(SRCS
 	libraries/GlobalTop/EPONmeaPacket.cpp
 	libraries/TinyGPSPlus/TinyGPS++.cpp
 	libraries/VParser/VParser.cpp
-	source/display/SegmentManager.cpp
-	source/display/Zoom.cpp
-	source/display/notifications.c
-    source/routes/ListePoints.cpp
-	source/routes/Parcours.cpp
-	source/routes/Points.cpp
-	source/routes/Segment.cpp
-	source/routes/Vecteur.cpp
-    source/sensors/fram.c
-    source/sensors/GPSMGMT.cpp
-	source/parsers/file_parser.cpp
-	source/model/Attitude.cpp
-	source/model/Boucle.cpp
-	source/model/BoucleCRS.cpp
-	source/model/BoucleFEC.cpp
-	source/model/Locator.cpp
-	source/model/PowerZone.cpp
-	source/model/RRZone.cpp
-	source/model/SufferScore.cpp
-	source/model/UserSettings.cpp
-	source/scheduling/power_scheduler.cpp
-	source/sd/sd_functions.cpp
-	source/vue/Screenutils.cpp
-	source/vue/Menuable.cpp
-    source/vue/MenuObjects.cpp
-	source/vue/Vue.cpp
-	source/vue/VueCRS.cpp
-	source/vue/VueDebug.cpp
-	source/vue/VueGPS.cpp
-	source/vue/VuePRC.cpp
-	source/vue/VueFEC.cpp
-	source/Model.cpp
-	source/g_structs.c
+	legacy/source/display/SegmentManager.cpp
+	legacy/source/display/Zoom.cpp
+	legacy/source/display/notifications.c
+    legacy/source/routes/ListePoints.cpp
+	legacy/source/routes/Parcours.cpp
+	legacy/source/routes/Points.cpp
+	legacy/source/routes/Segment.cpp
+	legacy/source/routes/Vecteur.cpp
+    legacy/source/sensors/fram.c
+    legacy/source/sensors/GPSMGMT.cpp
+	legacy/source/parsers/file_parser.cpp
+	legacy/source/model/Attitude.cpp
+	legacy/source/model/Boucle.cpp
+	legacy/source/model/BoucleCRS.cpp
+	legacy/source/model/BoucleFEC.cpp
+	legacy/source/model/Locator.cpp
+	legacy/source/model/PowerZone.cpp
+	legacy/source/model/RRZone.cpp
+	legacy/source/model/SufferScore.cpp
+	legacy/source/model/UserSettings.cpp
+	legacy/source/scheduling/power_scheduler.cpp
+	legacy/source/sd/sd_functions.cpp
+	legacy/source/vue/Screenutils.cpp
+	legacy/source/vue/Menuable.cpp
+    legacy/source/vue/MenuObjects.cpp
+	legacy/source/vue/Vue.cpp
+	legacy/source/vue/VueCRS.cpp
+	legacy/source/vue/VueDebug.cpp
+	legacy/source/vue/VueGPS.cpp
+	legacy/source/vue/VuePRC.cpp
+	legacy/source/vue/VueFEC.cpp
+	legacy/source/Model.cpp
+	legacy/source/g_structs.c
     )
 
 set(HEADERS
