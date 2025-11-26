@@ -94,6 +94,7 @@ target_sources(app PRIVATE
     src/model/parcours.c
     src/model/baro_drift.c
     src/model/loc_source.c
+    src/model/sd_logger.c
 )
 
 # RF Layer - Wireless Communication
