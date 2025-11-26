@@ -5,6 +5,7 @@
 
 #include <zephyr/kernel.h>
 #include <string.h>
+#include <stdio.h>
 #include <math.h>
 
 #include "app_types.h"

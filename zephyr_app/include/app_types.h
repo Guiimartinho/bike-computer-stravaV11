@@ -230,22 +230,33 @@ typedef enum {
 
 /* ==========================================================================
  * Utility Macros
+ * Note: These are guarded to avoid conflicts with Zephyr's util.h
  * ========================================================================== */
 
+#ifndef MIN
 /** Get minimum of two values */
 #define MIN(a, b)           (((a) < (b)) ? (a) : (b))
+#endif
 
+#ifndef MAX
 /** Get maximum of two values */
 #define MAX(a, b)           (((a) > (b)) ? (a) : (b))
+#endif
 
+#ifndef CLAMP
 /** Clamp value between min and max */
 #define CLAMP(val, min, max) (MIN(MAX((val), (min)), (max)))
+#endif
 
+#ifndef ARRAY_SIZE
 /** Get array element count */
 #define ARRAY_SIZE(arr)     (sizeof(arr) / sizeof((arr)[0]))
+#endif
 
+#ifndef IN_RANGE
 /** Check if value is within range [min, max] */
 #define IN_RANGE(val, min, max) (((val) >= (min)) && ((val) <= (max)))
+#endif
 
 /** Convert km/h to m/s */
 #define KMH_TO_MS(x)        ((x) / 3.6f)
