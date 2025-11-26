@@ -70,6 +70,11 @@ target_sources(app PRIVATE
     src/drivers/gps/nmea_parser.c
 )
 
+# Drivers - NeoPixel
+target_sources(app PRIVATE
+    src/drivers/neopixel.c
+)
+
 # Model Layer - Business Logic
 target_sources(app PRIVATE
     src/model/boucle.c
@@ -86,6 +91,7 @@ target_sources(app PRIVATE
     src/model/rr_zone.c
     src/model/user_settings.c
     src/model/crash_recovery.c
+    src/model/parcours.c
 )
 
 # RF Layer - Wireless Communication
@@ -93,6 +99,9 @@ target_sources(app PRIVATE
     src/rf/ble/ble_manager.c
     src/rf/ble/ble_nus.c
     src/rf/ble/ble_lns.c
+    src/rf/ble_hrs_client.c
+    src/rf/ble_bsc_client.c
+    src/rf/ble_fec_client.c
 )
 
 # Vue Layer - User Interface

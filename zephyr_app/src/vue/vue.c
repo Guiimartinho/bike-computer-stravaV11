@@ -13,6 +13,8 @@
 #include "model/boucle.h"
 #include "model/attitude.h"
 #include "model/segment.h"
+#include "model/parcours.h"
+#include "drivers/gps_mgmt.h"
 
 LOG_MODULE_REGISTER(vue, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -290,6 +292,239 @@ static void draw_page_stats(void)
 }
 
 /**
+ * @brief Draw parcours/route navigation page
+ */
+static void draw_page_parcours(void)
+{
+    parcours_info_t pinfo;
+    nav_info_t nav;
+    char buf[32];
+
+    uint16_t y = CONTENT_START_Y;
+
+    if (!parcours_is_loaded()) {
+        draw_string(60U, 100U, "No route loaded", 2U);
+        draw_string(40U, 130U, "Load .CRS from SD card", 1U);
+        return;
+    }
+
+    if (parcours_get_info(&pinfo) != APP_OK) {
+        return;
+    }
+
+    /* Route name */
+    draw_string(20U, y, pinfo.name, 2U);
+    y += 28U;
+
+    draw_hline(20U, y, LS027_WIDTH - 40U);
+    y += 8U;
+
+    if (!parcours_is_active()) {
+        draw_string(60U, y + 30U, "Press START to begin", 1U);
+        return;
+    }
+
+    if (parcours_get_nav_info(&nav) != APP_OK) {
+        return;
+    }
+
+    /* Progress percentage */
+    (void)snprintf(buf, sizeof(buf), "Progress: %.0f%%", (double)nav.pct_complete);
+    draw_string(20U, y, buf, 2U);
+    y += 24U;
+
+    /* Progress bar */
+    uint16_t bar_w = LS027_WIDTH - 60U;
+    uint16_t bar_h = 16U;
+    draw_rect(30U, y, bar_w, bar_h);
+    uint16_t fill_w = (uint16_t)((float)bar_w * (nav.pct_complete / 100.0f));
+    if (fill_w > 0U) {
+        ls027_fill_rect(30U, y, fill_w, bar_h, LS027_COLOR_BLACK);
+    }
+    y += 24U;
+
+    /* Distance remaining */
+    (void)snprintf(buf, sizeof(buf), "%.2f km", (double)(nav.dist_remaining / 1000.0f));
+    draw_string(20U, y, "Remaining:", 1U);
+    draw_string(140U, y, buf, 2U);
+    y += 24U;
+
+    /* Distance to route */
+    if (nav.on_route) {
+        (void)snprintf(buf, sizeof(buf), "%.0f m", (double)nav.dist_to_route);
+    } else {
+        (void)snprintf(buf, sizeof(buf), "OFF ROUTE (%.0f m)", (double)nav.dist_to_route);
+    }
+    draw_string(20U, y, "To Route:", 1U);
+    draw_string(140U, y, buf, 1U);
+    y += 20U;
+
+    /* Bearing to next point */
+    (void)snprintf(buf, sizeof(buf), "%.0f", (double)nav.bearing);
+    draw_string(20U, y, "Bearing:", 1U);
+    draw_string(140U, y, buf, 2U);
+    y += 24U;
+
+    /* Next point altitude */
+    (void)snprintf(buf, sizeof(buf), "%.0f m", (double)nav.altitude_next);
+    draw_string(20U, y, "Next Alt:", 1U);
+    draw_string(140U, y, buf, 1U);
+}
+
+/**
+ * @brief Draw GPS debug page
+ */
+static void draw_page_gps(void)
+{
+    gps_data_t gps;
+    char buf[48];
+
+    uint16_t y = CONTENT_START_Y;
+
+    draw_string(100U, y, "GPS STATUS", 2U);
+    y += 30U;
+
+    gps_state_t state = gps_mgmt_get_state();
+    const char *state_str;
+    switch (state) {
+    case GPS_STATE_OFF:
+        state_str = "OFF";
+        break;
+    case GPS_STATE_INIT:
+        state_str = "INIT";
+        break;
+    case GPS_STATE_ACQUIRING:
+        state_str = "ACQUIRING";
+        break;
+    case GPS_STATE_FIX_2D:
+        state_str = "FIX 2D";
+        break;
+    case GPS_STATE_FIX_3D:
+        state_str = "FIX 3D";
+        break;
+    case GPS_STATE_STANDBY:
+        state_str = "STANDBY";
+        break;
+    default:
+        state_str = "UNKNOWN";
+        break;
+    }
+
+    (void)snprintf(buf, sizeof(buf), "State: %s", state_str);
+    draw_string(20U, y, buf, 1U);
+    y += 16U;
+
+    if (gps_mgmt_get_data(&gps) == APP_OK) {
+        /* Satellites */
+        (void)snprintf(buf, sizeof(buf), "Satellites: %u", gps.satellites);
+        draw_string(20U, y, buf, 1U);
+        y += 16U;
+
+        /* HDOP */
+        (void)snprintf(buf, sizeof(buf), "HDOP: %.1f", (double)gps.hdop);
+        draw_string(20U, y, buf, 1U);
+        y += 16U;
+
+        if (gps.fix_valid) {
+            /* Latitude */
+            (void)snprintf(buf, sizeof(buf), "Lat:  %.6f", (double)gps.location.lat);
+            draw_string(20U, y, buf, 1U);
+            y += 16U;
+
+            /* Longitude */
+            (void)snprintf(buf, sizeof(buf), "Lon:  %.6f", (double)gps.location.lon);
+            draw_string(20U, y, buf, 1U);
+            y += 16U;
+
+            /* Altitude */
+            (void)snprintf(buf, sizeof(buf), "Alt:  %.1f m", (double)gps.location.alt);
+            draw_string(20U, y, buf, 1U);
+            y += 16U;
+
+            /* Speed */
+            (void)snprintf(buf, sizeof(buf), "Speed: %.1f km/h", (double)gps.location.speed);
+            draw_string(20U, y, buf, 1U);
+            y += 16U;
+
+            /* Course */
+            (void)snprintf(buf, sizeof(buf), "Course: %.1f", (double)gps.location.course);
+            draw_string(20U, y, buf, 1U);
+        } else {
+            draw_string(60U, y + 20U, "No valid fix", 2U);
+        }
+    } else {
+        draw_string(60U, y + 20U, "GPS data unavailable", 1U);
+    }
+}
+
+/**
+ * @brief Draw debug info page
+ */
+static void draw_page_debug(void)
+{
+    char buf[48];
+    uint16_t y = CONTENT_START_Y;
+
+    draw_string(100U, y, "DEBUG INFO", 2U);
+    y += 30U;
+
+    /* Uptime */
+    uint32_t uptime_ms = k_uptime_get_32();
+    uint32_t secs = uptime_ms / 1000U;
+    uint32_t mins = secs / 60U;
+    uint32_t hours = mins / 60U;
+
+    (void)snprintf(buf, sizeof(buf), "Uptime: %02u:%02u:%02u",
+                   (unsigned)(hours % 100U),
+                   (unsigned)(mins % 60U),
+                   (unsigned)(secs % 60U));
+    draw_string(20U, y, buf, 1U);
+    y += 16U;
+
+    /* Heap usage */
+    struct sys_memory_stats mem_stats;
+    sys_heap_runtime_stats_get(&_system_heap, &mem_stats);
+
+    (void)snprintf(buf, sizeof(buf), "Heap: %u / %u bytes",
+                   (unsigned)mem_stats.allocated_bytes,
+                   (unsigned)mem_stats.max_allocated_bytes);
+    draw_string(20U, y, buf, 1U);
+    y += 16U;
+
+    /* BLE state */
+    draw_string(20U, y, "BLE:", 1U);
+    draw_string(100U, y, "Active", 1U);
+    y += 16U;
+
+    /* Boucle state */
+    boucle_state_t bstate = boucle_get_state();
+    const char *bstate_str;
+    switch (bstate) {
+    case BOUCLE_STATE_IDLE:
+        bstate_str = "IDLE";
+        break;
+    case BOUCLE_STATE_RUNNING:
+        bstate_str = "RUNNING";
+        break;
+    case BOUCLE_STATE_PAUSED:
+        bstate_str = "PAUSED";
+        break;
+    default:
+        bstate_str = "UNKNOWN";
+        break;
+    }
+
+    (void)snprintf(buf, sizeof(buf), "Boucle: %s", bstate_str);
+    draw_string(20U, y, buf, 1U);
+    y += 16U;
+
+    /* Version */
+    (void)snprintf(buf, sizeof(buf), "Version: %u.%u.%u",
+                   APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_VERSION_PATCH);
+    draw_string(20U, y, buf, 1U);
+}
+
+/**
  * @brief Draw notification overlay
  */
 static void draw_notification(void)
@@ -374,8 +609,17 @@ void vue_update(void)
     case VUE_PAGE_SEGMENT:
         draw_page_segment();
         break;
+    case VUE_PAGE_PARCOURS:
+        draw_page_parcours();
+        break;
     case VUE_PAGE_STATS:
         draw_page_stats();
+        break;
+    case VUE_PAGE_GPS:
+        draw_page_gps();
+        break;
+    case VUE_PAGE_DEBUG:
+        draw_page_debug();
         break;
     case VUE_PAGE_MAP:
     case VUE_PAGE_SENSORS:

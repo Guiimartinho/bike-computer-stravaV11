@@ -25,9 +25,12 @@ extern "C" {
 typedef enum {
     VUE_PAGE_MAIN = 0,      /**< Main cycling data */
     VUE_PAGE_SEGMENT,       /**< Segment info */
+    VUE_PAGE_PARCOURS,      /**< Parcours/route navigation */
     VUE_PAGE_MAP,           /**< Map view */
     VUE_PAGE_STATS,         /**< Statistics */
     VUE_PAGE_SENSORS,       /**< Sensor status */
+    VUE_PAGE_GPS,           /**< GPS debug info */
+    VUE_PAGE_DEBUG,         /**< Debug info */
     VUE_PAGE_MENU,          /**< Settings menu */
     VUE_PAGE_COUNT
 } vue_page_t;
