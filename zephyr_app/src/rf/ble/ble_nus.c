@@ -136,7 +136,8 @@ app_err_t ble_nus_send(const uint8_t *data, uint16_t len)
     /* Send in chunks if needed */
     uint16_t offset = 0U;
     while (offset < len) {
-        uint16_t chunk_len = MIN(len - offset, NUS_MAX_LEN);
+        uint16_t remaining = len - offset;
+        uint16_t chunk_len = (remaining < NUS_MAX_LEN) ? remaining : (uint16_t)NUS_MAX_LEN;
 
         int err = bt_gatt_notify(NULL, attr, &data[offset], chunk_len);
         if (err < 0) {

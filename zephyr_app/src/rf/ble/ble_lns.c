@@ -19,9 +19,6 @@ LOG_MODULE_REGISTER(ble_lns, CONFIG_LOG_DEFAULT_LEVEL);
  * Private Definitions
  * ========================================================================== */
 
-/** LNS Service UUID */
-#define BT_UUID_LNS_VAL         0x1819U
-
 /** LNS Location and Speed UUID */
 #define BT_UUID_LNS_LOC_SPEED_VAL   0x2A67U
 

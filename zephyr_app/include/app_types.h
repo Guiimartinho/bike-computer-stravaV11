@@ -33,7 +33,7 @@ extern "C" {
 #define APP_NAME_LEN         9U
 
 /** Maximum number of segments that can be stored */
-#define MAX_SEGMENTS         500U
+#define MAX_SEGMENTS         50U
 
 /** Maximum number of points in history */
 #define MAX_HISTORY_POINTS   50U

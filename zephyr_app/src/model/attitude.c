@@ -136,7 +136,7 @@ static void compute_altitude_fusion(void)
     float baro_ele = compute_baro_altitude(current_ext.pressure);
 
     /* Initialize Kalman if not done */
-    if (!altitude_kf.is_initialized) {
+    if (!kalman_altitude_is_init(&altitude_kf)) {
         kalman_altitude_init(&altitude_kf, baro_ele);
         last_kalman_time = k_uptime_get_32();
         LOG_INF("Kalman altitude filter initialized (ele=%.1f)", (double)baro_ele);
@@ -149,35 +149,37 @@ static void compute_altitude_fusion(void)
         return;
     }
 
-    /* Calculate time delta and distance traveled */
+    /* Calculate time delta */
     uint32_t now = k_uptime_get_32();
-    float dt_sec = (float)(now - last_kalman_time) / 1000.0f;
-    float dl = current_speed_ms * dt_sec;
 
-    if (dl < 0.1f) {
-        return; /* Not enough movement */
-    }
+    /* Prepare feed structure for Kalman filter */
+    kalman_alt_feed_t feed = {
+        .baro_altitude = baro_ele,
+        .pitch_rad = current_pitch_rad,
+        .speed_ms = current_speed_ms,
+        .timestamp_ms = now
+    };
 
-    /* Feed Kalman filter */
-    kalman_altitude_feed(&altitude_kf, baro_ele, current_pitch_rad, dl);
-
-    /* Get filtered values */
-    current_elevation = kalman_altitude_get_elevation(&altitude_kf);
-    float alpha_bar = kalman_altitude_get_pitch(&altitude_kf);
-    float alpha_zero = kalman_altitude_get_alpha_zero(&altitude_kf);
+    /* Update Kalman filter and get output */
+    kalman_alt_output_t output;
+    bool updated = kalman_altitude_update(&altitude_kf, &feed, &output);
 
     last_kalman_time = now;
 
-    /* Update slope and vertical speed after enough data points */
-    if (current_att.nbpts > MIN_PTS_FOR_SLOPE) {
-        float slope = alpha_bar - alpha_zero;
-        current_att.slope = (int8_t)(100.0f * slope);
-        current_att.vit_asc = slope * current_speed_ms;
-    }
+    if (updated) {
+        /* Get filtered values */
+        current_elevation = output.elevation;
 
-    LOG_DBG("Fusion: ele=%.1f slope=%d vit_asc=%.2f alpha0=%.3f",
-            (double)current_elevation, current_att.slope,
-            (double)current_att.vit_asc, (double)alpha_zero);
+        /* Update slope and vertical speed after enough data points */
+        if (current_att.nbpts > MIN_PTS_FOR_SLOPE) {
+            current_att.slope = (int8_t)(100.0f * output.slope);
+            current_att.vit_asc = output.vit_asc;
+        }
+
+        LOG_DBG("Fusion: ele=%.1f slope=%d vit_asc=%.2f alpha0=%.3f",
+                (double)current_elevation, current_att.slope,
+                (double)current_att.vit_asc, (double)output.alpha_zero);
+    }
 }
 
 /**

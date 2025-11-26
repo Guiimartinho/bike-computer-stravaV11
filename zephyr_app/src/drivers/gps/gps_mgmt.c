@@ -6,6 +6,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "drivers/gps_mgmt.h"
 #include "drivers/nmea_parser.h"

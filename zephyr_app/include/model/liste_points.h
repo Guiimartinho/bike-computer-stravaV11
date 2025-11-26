@@ -20,13 +20,13 @@ extern "C" {
  * ========================================================================== */
 
 /** Maximum points in user history */
-#define LISTE_MAX_HISTORY       40U
+#define LISTE_MAX_HISTORY       20U
 
 /** Maximum points in a segment */
-#define LISTE_MAX_SEGMENT       500U
+#define LISTE_MAX_SEGMENT       200U
 
 /** Number of points for recording (rolling buffer) */
-#define NB_RECORDING            40U
+#define NB_RECORDING            20U
 
 /* ==========================================================================
  * Type Definitions

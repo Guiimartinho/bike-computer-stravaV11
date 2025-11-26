@@ -23,6 +23,7 @@
 #include "drivers/stc3100.h"
 #include "drivers/gps_mgmt.h"
 #include "model/boucle.h"
+#include "model/segment.h"
 #include "rf/ble_manager.h"
 #include "vue/vue.h"
 

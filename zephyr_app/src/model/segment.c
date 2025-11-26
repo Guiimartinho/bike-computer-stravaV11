@@ -10,12 +10,14 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/fs/fs.h>
 #include <string.h>
-#include <math.h>
+#include <stdio.h>
 
 #include "model/segment.h"
+
 #include "model/locator.h"
 #include "model/vecteur.h"
 #include "model/liste_points.h"
+#include <math.h>
 
 LOG_MODULE_REGISTER(segment, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -106,22 +108,22 @@ static bool test_activation(uint16_t seg_idx)
     }
 
     /* Get segment first two points */
-    point_t seg_p1, seg_p2;
-    if (!liste_get_point(&rt->pts, 0, &seg_p1) ||
-        !liste_get_point(&rt->pts, 1, &seg_p2)) {
+    const point_t *seg_p1 = liste_get_at(&rt->pts, 0);
+    const point_t *seg_p2 = liste_get_at(&rt->pts, 1);
+    if ((seg_p1 == NULL) || (seg_p2 == NULL)) {
         return false;
     }
 
     /* Get user's current and previous positions */
-    point_t cur_pos, prev_pos;
-    if (!liste_get_point(&user_history, 0, &cur_pos) ||
-        !liste_get_point(&user_history, 1, &prev_pos)) {
+    const point_t *cur_pos = liste_get_at(&user_history, 0);
+    const point_t *prev_pos = liste_get_at(&user_history, 1);
+    if ((cur_pos == NULL) || (prev_pos == NULL)) {
         return false;
     }
 
     /* Test activation using vector math (from vecteur module) */
-    return test_segment_activation(&cur_pos, &prev_pos,
-                                   &seg_p1, &seg_p2,
+    return test_segment_activation(cur_pos, prev_pos,
+                                   seg_p1, seg_p2,
                                    SEG_ACTIVATE_DIST, PSCAL_LIM);
 }
 
@@ -143,21 +145,21 @@ static bool test_deactivation(uint16_t seg_idx)
     }
 
     /* Get user's current position */
-    point_t cur_pos;
-    if (!liste_get_point(&user_history, 0, &cur_pos)) {
+    const point_t *cur_pos = liste_get_at(&user_history, 0);
+    if (cur_pos == NULL) {
         return false;
     }
 
     /* Get segment last two points */
-    point_t seg_last, seg_prev;
-    if (!liste_get_point(&rt->pts, (int32_t)rt->pts.count - 1, &seg_last) ||
-        !liste_get_point(&rt->pts, (int32_t)rt->pts.count - 2, &seg_prev)) {
+    const point_t *seg_last = liste_get_at(&rt->pts, (int16_t)(rt->pts.count - 1U));
+    const point_t *seg_prev = liste_get_at(&rt->pts, (int16_t)(rt->pts.count - 2U));
+    if ((seg_last == NULL) || (seg_prev == NULL)) {
         return false;
     }
 
     /* Test deactivation using vector math */
-    return test_segment_deactivation(&cur_pos, &seg_prev,
-                                     &seg_last, SEG_ACTIVATE_DIST);
+    return test_segment_deactivation(cur_pos, seg_prev,
+                                     seg_last, SEG_ACTIVATE_DIST);
 }
 
 /**
@@ -171,8 +173,8 @@ static float dist_to_start(uint16_t seg_idx, const loc_data_t *loc)
         return 9999.0f;
     }
 
-    point_t seg_start;
-    if (!liste_get_point(&rt->pts, 0, &seg_start)) {
+    const point_t *seg_start = liste_get_at(&rt->pts, 0);
+    if (seg_start == NULL) {
         return 9999.0f;
     }
 
@@ -180,10 +182,10 @@ static float dist_to_start(uint16_t seg_idx, const loc_data_t *loc)
         .lat = loc->lat,
         .lon = loc->lon,
         .alt = loc->alt,
-        .time = 0.0f
+        .rtime = 0.0f
     };
 
-    return point_distance(&cur_pos, &seg_start);
+    return point_distance(&cur_pos, seg_start);
 }
 
 /**
@@ -207,15 +209,15 @@ static void update_progress(uint16_t seg_idx, const loc_data_t *loc,
         .lat = loc->lat,
         .lon = loc->lon,
         .alt = loc->alt,
-        .time = current_time
+        .rtime = current_time
     };
 
     /* Update relative position on segment */
     liste_update_relative_position(&rt->pts, &cur_pos);
 
     /* Get interpolated position */
-    float rel_time = rt->pts.pos_rel.time;
-    float rel_dist = rt->pts.pos_rel.lat; /* Using lat as perpendicular distance */
+    float rel_time = rt->pts.pos_rel.t;
+    float rel_dist = rt->pts.pos_rel.y; /* Perpendicular distance */
 
     /* Check if too far from segment line */
     if (fabsf(rel_dist) > MARGE_ACT * SEG_ACTIVATE_DIST) {
@@ -228,17 +230,17 @@ static void update_progress(uint16_t seg_idx, const loc_data_t *loc,
     rt->cur_time = current_time - rt->start_time;
 
     /* Get reference time from segment first point */
-    point_t first_pt;
-    if (liste_get_point(&rt->pts, 0, &first_pt)) {
-        rt->advance = (rel_time - first_pt.time) - rt->cur_time;
+    const point_t *first_pt = liste_get_at(&rt->pts, 0);
+    if (first_pt != NULL) {
+        rt->advance = (rel_time - first_pt->rtime) - rt->cur_time;
     }
 
     /* Update progress percentage */
-    rt->pct_dist = (float)rt->pts.ind_p1 / (float)rt->pts.count;
+    rt->pct_dist = (float)rt->pts.idx_p1 / (float)rt->pts.count;
 
     /* Update elevation progress */
     if (rt->elev_total > 5.0f) {
-        float elev_at_pos = rt->pts.pos_rel.alt;
+        float elev_at_pos = rt->pts.pos_rel.z;
         rt->pct_elev = (elev_at_pos - rt->elev_start) / rt->elev_total;
     }
 
@@ -254,14 +256,7 @@ static void update_progress(uint16_t seg_idx, const loc_data_t *loc,
  */
 static void add_user_position(const loc_data_t *loc, float current_time)
 {
-    point_t pt = {
-        .lat = loc->lat,
-        .lon = loc->lon,
-        .alt = loc->alt,
-        .time = current_time
-    };
-
-    liste_add_point(&user_history, &pt, HISTO_POINT_SIZE);
+    liste_add_iso(&user_history, loc->lat, loc->lon, loc->alt, current_time, HISTO_POINT_SIZE);
 }
 
 /**
@@ -291,10 +286,10 @@ static void update_segment(uint16_t idx, const loc_data_t *loc, float current_ti
             /* Test activation with vector math */
             if (test_activation(idx)) {
                 /* Get interpolated start time from user history */
-                point_t seg_first;
-                if (liste_get_point(&rt->pts, 0, &seg_first)) {
-                    liste_update_relative_position(&user_history, &seg_first);
-                    rt->start_time = user_history.pos_rel.time;
+                const point_t *seg_first = liste_get_at(&rt->pts, 0);
+                if (seg_first != NULL) {
+                    liste_update_relative_position(&user_history, seg_first);
+                    rt->start_time = user_history.pos_rel.t;
                 } else {
                     rt->start_time = current_time;
                 }
@@ -331,10 +326,10 @@ static void update_segment(uint16_t idx, const loc_data_t *loc, float current_ti
         /* Test for segment finish (deactivation) */
         if (test_deactivation(idx)) {
             /* Segment finished - calculate final advance */
-            point_t seg_last;
-            if (liste_get_point(&rt->pts, (int32_t)rt->pts.count - 1, &seg_last)) {
-                liste_update_relative_position(&user_history, &seg_last);
-                rt->cur_time = user_history.pos_rel.time - rt->start_time;
+            const point_t *seg_last = liste_get_at(&rt->pts, (int16_t)(rt->pts.count - 1U));
+            if (seg_last != NULL) {
+                liste_update_relative_position(&user_history, seg_last);
+                rt->cur_time = user_history.pos_rel.t - rt->start_time;
                 rt->advance = seg->total_time - rt->cur_time;
             }
 
@@ -392,7 +387,7 @@ app_err_t segment_init(void)
     segment_count = 0U;
 
     /* Initialize user position history */
-    liste_init(&user_history);
+    liste_init(&user_history, LISTE_MAX_HISTORY);
 
     is_initialized = true;
     LOG_INF("Segment manager initialized");

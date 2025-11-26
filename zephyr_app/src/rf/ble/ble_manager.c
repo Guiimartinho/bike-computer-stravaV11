@@ -173,7 +173,7 @@ app_err_t ble_manager_start_advertising(void)
         .id = BT_ID_DEFAULT,
         .sid = 0U,
         .secondary_max_skip = 0U,
-        .options = BT_LE_ADV_OPT_CONNECTABLE | BT_LE_ADV_OPT_ONE_TIME,
+        .options = BT_LE_ADV_OPT_CONN,
         .interval_min = ADV_INTERVAL_MIN,
         .interval_max = ADV_INTERVAL_MAX,
         .peer = NULL,
