@@ -40,6 +40,18 @@ typedef enum {
     NMEA_ZDA        /**< Time and Date */
 } nmea_type_t;
 
+/** Maximum satellites to track */
+#define NMEA_MAX_SATELLITES     12U
+
+/** Satellite information structure (from GSV) */
+typedef struct {
+    uint8_t prn;                /**< Satellite PRN number */
+    uint8_t elevation;          /**< Elevation in degrees (0-90) */
+    uint16_t azimuth;           /**< Azimuth in degrees (0-359) */
+    uint8_t snr;                /**< Signal-to-Noise Ratio (0-99 dB-Hz) */
+    bool in_use;                /**< Satellite used in fix (from GSA) */
+} nmea_satellite_t;
+
 /** NMEA parse result */
 typedef struct {
     nmea_type_t type;           /**< Sentence type */
@@ -56,7 +68,7 @@ typedef struct {
 
     /* Quality data (GGA, GSA) */
     uint8_t fix_quality;        /**< Fix quality indicator */
-    uint8_t satellites;         /**< Number of satellites */
+    uint8_t satellites;         /**< Number of satellites used in fix */
     float hdop;                 /**< Horizontal DOP */
     float vdop;                 /**< Vertical DOP */
     float pdop;                 /**< Position DOP */
@@ -71,7 +83,20 @@ typedef struct {
     uint8_t day;                /**< Day of month */
     uint8_t month;              /**< Month (1-12) */
     uint16_t year;              /**< Year */
+
+    /* GSV data - satellites in view */
+    uint8_t sats_in_view;       /**< Total satellites in view */
+    uint8_t gsv_sat_count;      /**< Satellites with info parsed */
 } nmea_data_t;
+
+/** Extended satellite data (accumulated from multiple GSV sentences) */
+typedef struct {
+    nmea_satellite_t sats[NMEA_MAX_SATELLITES];  /**< Satellite info */
+    uint8_t count;                               /**< Number of valid entries */
+    uint8_t sats_in_view;                        /**< Total sats in view */
+    uint8_t prns_in_use[12];                     /**< PRNs used in fix (from GSA) */
+    uint8_t in_use_count;                        /**< Number of sats in use */
+} nmea_satellites_t;
 
 /* ==========================================================================
  * Public Functions
@@ -129,6 +154,30 @@ uint8_t nmea_calculate_checksum(const char *sentence);
  * @return true if checksum is valid
  */
 bool nmea_verify_checksum(const char *sentence);
+
+/**
+ * @brief Get satellite information
+ * @param sats Pointer to store satellite data
+ * @return APP_OK on success
+ */
+app_err_t nmea_parser_get_satellites(nmea_satellites_t *sats);
+
+/**
+ * @brief Get number of satellites in view
+ * @return Number of satellites in view
+ */
+uint8_t nmea_parser_get_sats_in_view(void);
+
+/**
+ * @brief Get average SNR of satellites in use
+ * @return Average SNR in dB-Hz
+ */
+uint8_t nmea_parser_get_avg_snr(void);
+
+/**
+ * @brief Reset satellite tracking data
+ */
+void nmea_parser_reset_satellites(void);
 
 #ifdef __cplusplus
 }

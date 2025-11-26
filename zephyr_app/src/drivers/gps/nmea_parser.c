@@ -51,6 +51,9 @@ static bool position_valid;
 /** Time valid flag */
 static bool time_valid;
 
+/** Satellite tracking data */
+static nmea_satellites_t sat_data;
+
 /* ==========================================================================
  * Private Functions
  * ========================================================================== */
@@ -292,7 +295,25 @@ static app_err_t parse_gsa(const char *sentence, nmea_data_t *data)
     uint8_t fix_type = (uint8_t)atoi(field);
     data->fix_valid = (fix_type >= 2U);
 
-    /* Fields 3-14: Satellite PRNs (skip) */
+    /* Fields 3-14: Satellite PRNs in use */
+    sat_data.in_use_count = 0U;
+    for (uint8_t i = 0U; i < 12U; i++) {
+        copy_field(sentence, (uint8_t)(3U + i), field, sizeof(field));
+        if (field[0] != '\0') {
+            uint8_t prn = (uint8_t)atoi(field);
+            if ((prn > 0U) && (sat_data.in_use_count < 12U)) {
+                sat_data.prns_in_use[sat_data.in_use_count] = prn;
+                sat_data.in_use_count++;
+
+                /* Mark this PRN as in_use in satellite list */
+                for (uint8_t j = 0U; j < sat_data.count; j++) {
+                    if (sat_data.sats[j].prn == prn) {
+                        sat_data.sats[j].in_use = true;
+                    }
+                }
+            }
+        }
+    }
 
     /* Field 15: PDOP */
     copy_field(sentence, 15U, field, sizeof(field));
@@ -305,6 +326,90 @@ static app_err_t parse_gsa(const char *sentence, nmea_data_t *data)
     /* Field 17: VDOP */
     copy_field(sentence, 17U, field, sizeof(field));
     data->vdop = (float)atof(field);
+
+    data->valid = true;
+    return APP_OK;
+}
+
+/**
+ * @brief Parse GSV sentence (Satellites in view)
+ *
+ * GSV provides detailed info about satellites:
+ * $GPGSV,total_msgs,msg_num,sats_in_view,prn1,elev1,azim1,snr1,...*cs
+ * Each message contains up to 4 satellites
+ */
+static app_err_t parse_gsv(const char *sentence, nmea_data_t *data)
+{
+    char field[20];
+
+    data->type = NMEA_GSV;
+
+    /* Field 1: Total number of GSV messages */
+    copy_field(sentence, 1U, field, sizeof(field));
+    uint8_t total_msgs = (uint8_t)atoi(field);
+
+    /* Field 2: Message number (1-based) */
+    copy_field(sentence, 2U, field, sizeof(field));
+    uint8_t msg_num = (uint8_t)atoi(field);
+
+    /* Field 3: Total satellites in view */
+    copy_field(sentence, 3U, field, sizeof(field));
+    data->sats_in_view = (uint8_t)atoi(field);
+    sat_data.sats_in_view = data->sats_in_view;
+
+    /* First message - reset satellite list */
+    if (msg_num == 1U) {
+        sat_data.count = 0U;
+        (void)memset(sat_data.sats, 0, sizeof(sat_data.sats));
+    }
+
+    /* Parse up to 4 satellites per message */
+    for (uint8_t i = 0U; i < 4U; i++) {
+        uint8_t base_field = (uint8_t)(4U + (i * 4U));
+
+        /* PRN */
+        copy_field(sentence, base_field, field, sizeof(field));
+        if (field[0] == '\0') {
+            break;  /* No more satellites in this message */
+        }
+        uint8_t prn = (uint8_t)atoi(field);
+
+        if ((prn > 0U) && (sat_data.count < NMEA_MAX_SATELLITES)) {
+            nmea_satellite_t *sat = &sat_data.sats[sat_data.count];
+
+            sat->prn = prn;
+
+            /* Elevation */
+            copy_field(sentence, (uint8_t)(base_field + 1U), field, sizeof(field));
+            sat->elevation = (uint8_t)atoi(field);
+
+            /* Azimuth */
+            copy_field(sentence, (uint8_t)(base_field + 2U), field, sizeof(field));
+            sat->azimuth = (uint16_t)atoi(field);
+
+            /* SNR (can be empty if not tracking) */
+            copy_field(sentence, (uint8_t)(base_field + 3U), field, sizeof(field));
+            sat->snr = (field[0] != '\0') ? (uint8_t)atoi(field) : 0U;
+
+            /* Check if this PRN is in use */
+            sat->in_use = false;
+            for (uint8_t j = 0U; j < sat_data.in_use_count; j++) {
+                if (sat_data.prns_in_use[j] == prn) {
+                    sat->in_use = true;
+                    break;
+                }
+            }
+
+            sat_data.count++;
+            data->gsv_sat_count = sat_data.count;
+        }
+    }
+
+    /* Log on last message */
+    if (msg_num == total_msgs) {
+        LOG_DBG("GSV complete: %u sats in view, %u tracked",
+                sat_data.sats_in_view, sat_data.count);
+    }
 
     data->valid = true;
     return APP_OK;
@@ -475,6 +580,7 @@ app_err_t nmea_parser_sentence(const char *sentence, nmea_data_t *data)
     case NMEA_VTG:
         return parse_vtg(sentence, data);
     case NMEA_GSV:
+        return parse_gsv(sentence, data);
     case NMEA_GLL:
     case NMEA_ZDA:
         /* These sentences are recognized but not fully parsed */
@@ -547,4 +653,48 @@ bool nmea_verify_checksum(const char *sentence)
     uint8_t recv_checksum = (hex_to_val(asterisk[1]) << 4) | hex_to_val(asterisk[2]);
 
     return (calc_checksum == recv_checksum);
+}
+
+app_err_t nmea_parser_get_satellites(nmea_satellites_t *sats)
+{
+    if (sats == NULL) {
+        return APP_ERR_INVALID_PARAM;
+    }
+
+    *sats = sat_data;
+    return APP_OK;
+}
+
+uint8_t nmea_parser_get_sats_in_view(void)
+{
+    return sat_data.sats_in_view;
+}
+
+uint8_t nmea_parser_get_avg_snr(void)
+{
+    if (sat_data.in_use_count == 0U) {
+        return 0U;
+    }
+
+    uint16_t total_snr = 0U;
+    uint8_t snr_count = 0U;
+
+    /* Average SNR only for satellites in use */
+    for (uint8_t i = 0U; i < sat_data.count; i++) {
+        if (sat_data.sats[i].in_use && (sat_data.sats[i].snr > 0U)) {
+            total_snr += sat_data.sats[i].snr;
+            snr_count++;
+        }
+    }
+
+    if (snr_count == 0U) {
+        return 0U;
+    }
+
+    return (uint8_t)(total_snr / snr_count);
+}
+
+void nmea_parser_reset_satellites(void)
+{
+    (void)memset(&sat_data, 0, sizeof(sat_data));
 }
