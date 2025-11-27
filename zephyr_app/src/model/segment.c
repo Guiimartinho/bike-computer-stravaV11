@@ -570,6 +570,7 @@ uint8_t segment_get_active(segment_t *segs, uint8_t max_count)
 
     uint8_t count = 0U;
 
+    /* Collect active segments */
     for (uint16_t i = 0U; (i < segment_count) && (count < max_count); i++) {
         if ((segments[i].status == SEG_START) ||
             (segments[i].status == SEG_ON) ||
@@ -579,7 +580,82 @@ uint8_t segment_get_active(segment_t *segs, uint8_t max_count)
         }
     }
 
+    /* Sort by score (descending) using insertion sort - efficient for small arrays */
+    for (uint8_t i = 1U; i < count; i++) {
+        segment_t temp = segs[i];
+        int8_t j = (int8_t)i - 1;
+
+        while ((j >= 0) && (segs[j].score < temp.score)) {
+            segs[j + 1] = segs[j];
+            j--;
+        }
+        segs[j + 1] = temp;
+    }
+
     return count;
+}
+
+uint8_t segment_get_nearby(segment_t *segs, uint8_t max_count, float lat, float lon)
+{
+    if (!is_initialized || (segs == NULL) || (max_count == 0U)) {
+        return 0U;
+    }
+
+    /* Temporary array to store segment indices and distances */
+    typedef struct {
+        uint16_t idx;
+        float dist;
+    } seg_dist_t;
+
+    seg_dist_t seg_dists[MAX_SEGMENTS];
+    uint8_t count = 0U;
+
+    /* Calculate distance for all loaded segments */
+    for (uint16_t i = 0U; i < segment_count; i++) {
+        seg_runtime_t *rt = &seg_runtime[i];
+
+        /* Only include segments with loaded points */
+        if (!rt->pts_loaded || (rt->pts.count == 0U)) {
+            continue;
+        }
+
+        /* Get distance to first point */
+        const point_t *seg_start = liste_get_at(&rt->pts, 0);
+        if (seg_start == NULL) {
+            continue;
+        }
+
+        point_t cur = { .lat = lat, .lon = lon, .alt = 0.0f, .rtime = 0.0f };
+        float dist = point_distance(&cur, seg_start);
+
+        seg_dists[count].idx = i;
+        seg_dists[count].dist = dist;
+        count++;
+
+        if (count >= MAX_SEGMENTS) {
+            break;
+        }
+    }
+
+    /* Sort by distance (ascending) using insertion sort */
+    for (uint8_t i = 1U; i < count; i++) {
+        seg_dist_t temp = seg_dists[i];
+        int8_t j = (int8_t)i - 1;
+
+        while ((j >= 0) && (seg_dists[j].dist > temp.dist)) {
+            seg_dists[j + 1] = seg_dists[j];
+            j--;
+        }
+        seg_dists[j + 1] = temp;
+    }
+
+    /* Copy sorted segments to output array */
+    uint8_t result_count = (count < max_count) ? count : max_count;
+    for (uint8_t i = 0U; i < result_count; i++) {
+        segs[i] = segments[seg_dists[i].idx];
+    }
+
+    return result_count;
 }
 
 app_err_t segment_register_callback(seg_status_callback_t callback)

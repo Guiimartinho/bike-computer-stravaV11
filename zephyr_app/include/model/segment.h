@@ -107,12 +107,31 @@ app_err_t segment_get(uint8_t index, segment_t *seg);
 app_err_t segment_get_best(segment_t *seg);
 
 /**
- * @brief Get all active segments
+ * @brief Get all active segments sorted by score (descending)
+ *
+ * Returns active segments (SEG_START, SEG_ON, SEG_FIN) sorted by score,
+ * with highest score first. This ensures the most relevant segments
+ * are displayed first in the UI.
+ *
  * @param segs Array to store segments
  * @param max_count Maximum number of segments
  * @return Number of active segments
  */
 uint8_t segment_get_active(segment_t *segs, uint8_t max_count);
+
+/**
+ * @brief Get nearby segments sorted by distance
+ *
+ * Returns all loaded segments sorted by distance to current position.
+ * Only segments with loaded points are included.
+ *
+ * @param segs Array to store segments
+ * @param max_count Maximum number of segments
+ * @param lat Current latitude
+ * @param lon Current longitude
+ * @return Number of segments returned
+ */
+uint8_t segment_get_nearby(segment_t *segs, uint8_t max_count, float lat, float lon);
 
 /**
  * @brief Register callback for segment status changes
