@@ -5,7 +5,7 @@
 cmake_minimum_required(VERSION 3.20.0)
 
 # Board configuration
-set(BOARD nrf52840dk_nrf52840)
+set(BOARD nrf52840dk/nrf52840)
 set(BOARD_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 set(DTC_OVERLAY_FILE ${CMAKE_CURRENT_SOURCE_DIR}/boards/nrf52840_strava.overlay)
 
@@ -105,6 +105,7 @@ target_sources(app PRIVATE
     src/rf/ble_hrs_client.c
     src/rf/ble_bsc_client.c
     src/rf/ble_fec_client.c
+    src/rf/ble_komoot_client.c
 )
 
 # Vue Layer - User Interface

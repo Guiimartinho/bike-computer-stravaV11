@@ -19,6 +19,7 @@
 #include "rf/ble_lns.h"
 #include "rf/ble_hrs_client.h"
 #include "rf/ble_bsc_client.h"
+#include "rf/ble_komoot_client.h"
 
 LOG_MODULE_REGISTER(ble_mgr, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -40,8 +41,7 @@ LOG_MODULE_REGISTER(ble_mgr, CONFIG_LOG_DEFAULT_LEVEL);
 /** Maximum pending connections */
 #define MAX_PENDING_CONN    2U
 
-/** Service UUIDs for filtering */
-#define BT_UUID_HRS_VAL     0x180D
+/** Service UUIDs for filtering (use Zephyr's BT_UUID_HRS_VAL) */
 #define BT_UUID_CSC_VAL     0x1816
 
 /** Sensor type flags */
@@ -205,7 +205,7 @@ static void connect_to_sensor(const bt_addr_le_t *addr, uint8_t sensor_type)
     }
 
     /* Store pending sensor info */
-    for (int i = 0; i < MAX_PENDING_CONN; i++) {
+    for (uint8_t i = 0U; i < MAX_PENDING_CONN; i++) {
         if (!pending_sensors[i].pending) {
             bt_addr_le_copy(&pending_sensors[i].addr, addr);
             pending_sensors[i].sensor_type = sensor_type;
@@ -264,7 +264,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
     if (err != 0U) {
         LOG_ERR("Connection failed (err %u)", err);
         /* Clear pending and resume scan */
-        for (int i = 0; i < MAX_PENDING_CONN; i++) {
+        for (uint8_t i = 0U; i < MAX_PENDING_CONN; i++) {
             pending_sensors[i].pending = false;
         }
         (void)ble_manager_start_scan();
@@ -278,7 +278,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
     }
 
     /* Check if this is a pending sensor connection */
-    for (int i = 0; i < MAX_PENDING_CONN; i++) {
+    for (uint8_t i = 0U; i < MAX_PENDING_CONN; i++) {
         if (pending_sensors[i].pending &&
             bt_addr_le_cmp(&pending_sensors[i].addr, info.le.dst) == 0) {
             sensor_type = pending_sensors[i].sensor_type;
@@ -312,6 +312,9 @@ static void connected(struct bt_conn *conn, uint8_t err)
         conn_info.connected = true;
         ble_state = BLE_STATE_CONNECTED;
         LOG_INF("Peripheral connected");
+
+        /* Try to discover Komoot navigation service */
+        ble_komoot_client_on_connect(conn);
     }
 
     if (event_callback != NULL) {
@@ -325,6 +328,9 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
     /* Check which connection was lost */
     if (conn == peripheral_conn) {
+        /* Handle Komoot disconnect */
+        ble_komoot_client_on_disconnect(conn);
+
         bt_conn_unref(peripheral_conn);
         peripheral_conn = NULL;
         conn_info.connected = false;
@@ -400,6 +406,11 @@ app_err_t ble_manager_init(void)
     err = ble_bsc_client_init();
     if ((err != APP_OK) && (err != APP_ERR_ALREADY_INIT)) {
         LOG_WRN("BSC client init failed: %d", err);
+    }
+
+    err = ble_komoot_client_init();
+    if ((err != APP_OK) && (err != APP_ERR_ALREADY_INIT)) {
+        LOG_WRN("Komoot client init failed: %d", err);
     }
 
     /* Clear connection info */
@@ -541,7 +552,7 @@ ble_state_t ble_manager_get_state(void)
 
 bool ble_manager_is_connected(void)
 {
-    return (ble_state == BLE_STATE_CONNECTED) && (current_conn != NULL);
+    return (ble_state == BLE_STATE_CONNECTED) && (peripheral_conn != NULL);
 }
 
 app_err_t ble_manager_get_conn_info(ble_conn_info_t *info)
@@ -564,11 +575,11 @@ app_err_t ble_manager_disconnect(void)
         return APP_ERR_NOT_INIT;
     }
 
-    if (current_conn == NULL) {
+    if (peripheral_conn == NULL) {
         return APP_ERR_NOT_FOUND;
     }
 
-    int err = bt_conn_disconnect(current_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+    int err = bt_conn_disconnect(peripheral_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
     if (err < 0) {
         LOG_ERR("Disconnect failed (err %d)", err);
         return APP_ERR_IO;
