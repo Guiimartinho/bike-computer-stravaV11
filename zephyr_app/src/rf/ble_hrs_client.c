@@ -20,17 +20,13 @@ LOG_MODULE_REGISTER(ble_hrs_client, CONFIG_LOG_DEFAULT_LEVEL);
  * Private Definitions
  * ========================================================================== */
 
-/** Heart Rate Service UUID */
-#define BT_UUID_HRS_VAL             0x180D
+/* Note: BT_UUID_HRS_VAL, BT_UUID_HRS_MEASUREMENT_VAL, BT_UUID_HRS_BODY_SENSOR_VAL
+ * are defined in <zephyr/bluetooth/uuid.h> */
 
-/** Heart Rate Measurement Characteristic UUID */
-#define BT_UUID_HRS_MEASUREMENT_VAL 0x2A37
-
-/** Body Sensor Location Characteristic UUID */
-#define BT_UUID_HRS_BODY_SENSOR_VAL 0x2A38
-
-/** Heart Rate Control Point UUID */
+/** Heart Rate Control Point UUID (not in standard uuid.h) */
+#ifndef BT_UUID_HRS_CONTROL_VAL
 #define BT_UUID_HRS_CONTROL_VAL     0x2A39
+#endif
 
 /* UUID declarations */
 static struct bt_uuid_16 uuid_hrs = BT_UUID_INIT_16(BT_UUID_HRS_VAL);

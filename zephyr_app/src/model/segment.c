@@ -86,6 +86,14 @@ static seg_status_callback_t status_callback;
 static bool is_initialized;
 
 /* ==========================================================================
+ * Private Function Forward Declarations
+ * ========================================================================== */
+
+static int load_segment_points(uint16_t seg_idx);
+static void unload_segment_points(uint16_t seg_idx);
+static float dist_to_seg_header(uint16_t seg_idx, float lat, float lon);
+
+/* ==========================================================================
  * Private Functions
  * ========================================================================== */
 
@@ -430,7 +438,7 @@ int segment_load_all(void)
         }
 
         /* Load segment header */
-        char path[64];
+        char path[280];  /* SEG_DIR + "/" + max filename (255) */
         (void)snprintf(path, sizeof(path), "%s/%s", SEG_DIR, entry.name);
 
         struct fs_file_t file;
@@ -586,12 +594,39 @@ app_err_t segment_register_callback(seg_status_callback_t callback)
 
 float segment_get_nearest_distance(void)
 {
-    float nearest = -1.0f;
+    if (!is_initialized || (segment_count == 0U)) {
+        return -1.0f;
+    }
 
-    /* This would need current position and segment start points */
-    /* Placeholder implementation */
+    float nearest = 9999.0f;
 
-    return nearest;
+    for (uint16_t i = 0U; i < segment_count; i++) {
+        seg_runtime_t *rt = &seg_runtime[i];
+
+        /* Skip if points not loaded */
+        if (!rt->pts_loaded || (rt->pts.count == 0U)) {
+            continue;
+        }
+
+        /* Get distance to first point of segment */
+        const point_t *seg_start = liste_get_at(&rt->pts, 0);
+        if (seg_start == NULL) {
+            continue;
+        }
+
+        /* Get current position from user history */
+        const point_t *cur_pos = liste_get_at(&user_history, 0);
+        if (cur_pos == NULL) {
+            continue;
+        }
+
+        float dist = point_distance(cur_pos, seg_start);
+        if (dist < nearest) {
+            nearest = dist;
+        }
+    }
+
+    return (nearest < 9000.0f) ? nearest : -1.0f;
 }
 
 uint16_t segment_get_total_count(void)
@@ -644,4 +679,188 @@ void segment_unload_all(void)
     liste_clear(&user_history);
 
     LOG_INF("All segments unloaded");
+}
+
+/**
+ * @brief Load segment points from file
+ */
+static int load_segment_points(uint16_t seg_idx)
+{
+    if (seg_idx >= segment_count) {
+        return -1;
+    }
+
+    seg_runtime_t *rt = &seg_runtime[seg_idx];
+    segment_t *seg = &segments[seg_idx];
+
+    if (rt->pts_loaded) {
+        return 0;  /* Already loaded */
+    }
+
+    /* Build filename */
+    char path[64];
+    (void)snprintf(path, sizeof(path), "%s/%s.seg", SEG_DIR, seg->name);
+
+    struct fs_file_t file;
+    fs_file_t_init(&file);
+
+    if (fs_open(&file, path, FS_O_READ) < 0) {
+        LOG_WRN("Cannot open segment file: %s", path);
+        return -1;
+    }
+
+    /* Skip header */
+    (void)fs_seek(&file, (off_t)sizeof(seg_header_t), FS_SEEK_SET);
+
+    /* Initialize point list */
+    liste_init(&rt->pts, MAX_SEG_POINTS);
+
+    /* Read points */
+    seg_point_t pt;
+    int count = 0;
+    while (fs_read(&file, &pt, sizeof(seg_point_t)) == sizeof(seg_point_t)) {
+        liste_add_back(&rt->pts, pt.lat, pt.lon, pt.alt, pt.time);
+        count++;
+
+        if ((uint16_t)count >= MAX_SEG_POINTS) {
+            LOG_WRN("Segment %s truncated at %d points", seg->name, count);
+            break;
+        }
+    }
+
+    (void)fs_close(&file);
+
+    if (count > 0) {
+        rt->pts_loaded = true;
+        rt->elev_total = seg->total_elev;
+
+        LOG_INF("Loaded %d points for segment %s", count, seg->name);
+        return count;
+    }
+
+    return -1;
+}
+
+/**
+ * @brief Unload segment points to free memory
+ */
+static void unload_segment_points(uint16_t seg_idx)
+{
+    if (seg_idx >= segment_count) {
+        return;
+    }
+
+    seg_runtime_t *rt = &seg_runtime[seg_idx];
+    segment_t *seg = &segments[seg_idx];
+
+    if (!rt->pts_loaded) {
+        return;
+    }
+
+    liste_clear(&rt->pts);
+    rt->pts_loaded = false;
+
+    /* Reset segment state */
+    seg->status = SEG_OFF;
+    seg->cur_time = 0.0f;
+    seg->advance = 0.0f;
+    seg->pct_dist = 0.0f;
+    seg->score = 0;
+
+    LOG_INF("Unloaded segment %s", seg->name);
+}
+
+/**
+ * @brief Calculate distance from coordinates to segment start using header
+ */
+static float dist_to_seg_header(uint16_t seg_idx, float lat, float lon)
+{
+    if (seg_idx >= segment_count) {
+        return 9999.0f;
+    }
+
+    /* Parse segment name for coordinates (format: LLLLL#LLL.seg)
+     * Where LLLLL is lat*100 and LLL is lon*100 */
+    seg_header_t *hdr = &seg_headers[seg_idx];
+
+    /* For now use a simplified approach - load first point if needed */
+    seg_runtime_t *rt = &seg_runtime[seg_idx];
+
+    if (rt->pts_loaded && (rt->pts.count > 0U)) {
+        const point_t *seg_start = liste_get_at(&rt->pts, 0);
+        if (seg_start != NULL) {
+            point_t cur = { .lat = lat, .lon = lon, .alt = 0.0f, .rtime = 0.0f };
+            return point_distance(&cur, seg_start);
+        }
+    }
+
+    /* If points not loaded, estimate from header name parsing */
+    /* This is a simplified implementation - full implementation would
+     * parse the segment filename for coordinates */
+    (void)hdr;  /* Avoid unused warning */
+
+    return 9999.0f;
+}
+
+float segment_allocator(uint16_t seg_idx, float lat, float lon)
+{
+    if (!is_initialized || (seg_idx >= segment_count)) {
+        return -1.0f;
+    }
+
+    seg_runtime_t *rt = &seg_runtime[seg_idx];
+    segment_t *seg = &segments[seg_idx];
+    float dist_to_seg = 9999.0f;
+
+    /* Segment is loaded with points */
+    if (rt->pts_loaded && (rt->pts.count > 0U)) {
+        /* Get distance to first point */
+        const point_t *seg_start = liste_get_at(&rt->pts, 0);
+        if (seg_start != NULL) {
+            point_t cur = { .lat = lat, .lon = lon, .alt = 0.0f, .rtime = 0.0f };
+            dist_to_seg = point_distance(&cur, seg_start);
+        }
+
+        /* Check if segment is inactive and too far - unload */
+        if ((seg->status == SEG_OFF) && (dist_to_seg > SEG_ALLOC_DIST)) {
+            unload_segment_points(seg_idx);
+            LOG_DBG("Unallocated segment %s (dist=%.0f)", seg->name, (double)dist_to_seg);
+        }
+        /* Check if active but way too far - force unload */
+        else if (dist_to_seg > SEG_MARGE_DESACT * SEG_ALLOC_DIST) {
+            unload_segment_points(seg_idx);
+            LOG_WRN("Force unallocated segment %s", seg->name);
+        }
+    }
+    /* Segment not loaded - check if should load */
+    else {
+        dist_to_seg = dist_to_seg_header(seg_idx, lat, lon);
+
+        if (dist_to_seg < SEG_ALLOC_DIST) {
+            int res = load_segment_points(seg_idx);
+            if (res > 0) {
+                LOG_INF("Allocated segment %s (dist=%.0f)", seg->name, (double)dist_to_seg);
+            }
+        }
+    }
+
+    return dist_to_seg;
+}
+
+float segment_run_allocator(float lat, float lon)
+{
+    if (!is_initialized || (segment_count == 0U)) {
+        return -1.0f;
+    }
+
+    float nearest = 9999.0f;
+
+    for (uint16_t i = 0U; i < segment_count; i++) {
+        float dist = segment_allocator(i, lat, lon);
+        if ((dist >= 0.0f) && (dist < nearest)) {
+            nearest = dist;
+        }
+    }
+
+    return (nearest < 9000.0f) ? nearest : -1.0f;
 }

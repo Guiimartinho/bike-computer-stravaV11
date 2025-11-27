@@ -481,13 +481,9 @@ static void draw_page_debug(void)
     draw_string(20U, y, buf, 1U);
     y += 16U;
 
-    /* Heap usage */
-    struct sys_memory_stats mem_stats;
-    sys_heap_runtime_stats_get(&_system_heap, &mem_stats);
-
-    (void)snprintf(buf, sizeof(buf), "Heap: %u / %u bytes",
-                   (unsigned)mem_stats.allocated_bytes,
-                   (unsigned)mem_stats.max_allocated_bytes);
+    /* Heap configured size */
+    (void)snprintf(buf, sizeof(buf), "Heap: %u bytes configured",
+                   (unsigned)CONFIG_HEAP_MEM_POOL_SIZE);
     draw_string(20U, y, buf, 1U);
     y += 16U;
 

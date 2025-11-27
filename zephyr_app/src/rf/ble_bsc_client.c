@@ -20,17 +20,13 @@ LOG_MODULE_REGISTER(ble_bsc_client, CONFIG_LOG_DEFAULT_LEVEL);
  * Private Definitions
  * ========================================================================== */
 
-/** Cycling Speed and Cadence Service UUID */
-#define BT_UUID_CSC_VAL             0x1816
+/* Note: BT_UUID_CSC_VAL, BT_UUID_CSC_MEASUREMENT_VAL, BT_UUID_CSC_FEATURE_VAL
+ * are defined in <zephyr/bluetooth/uuid.h> */
 
-/** CSC Measurement Characteristic UUID */
-#define BT_UUID_CSC_MEASUREMENT_VAL 0x2A5B
-
-/** CSC Feature Characteristic UUID */
-#define BT_UUID_CSC_FEATURE_VAL     0x2A5C
-
-/** Sensor Location Characteristic UUID */
+/** Sensor Location Characteristic UUID (not in standard uuid.h) */
+#ifndef BT_UUID_SENSOR_LOC_VAL
 #define BT_UUID_SENSOR_LOC_VAL      0x2A5D
+#endif
 
 /** Default wheel circumference in mm (700x25c) */
 #define DEFAULT_WHEEL_CIRCUMFERENCE 2105U

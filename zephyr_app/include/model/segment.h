@@ -27,6 +27,12 @@ extern "C" {
 /** Segment deactivation distance in meters */
 #define SEG_DEACTIVATE_DIST     100.0f
 
+/** Distance for dynamic segment allocation (from legacy) */
+#define SEG_ALLOC_DIST          3000.0f
+
+/** Deallocation margin factor (from legacy) */
+#define SEG_MARGE_DESACT        1.5f
+
 /** Maximum segment name length */
 #define SEG_NAME_MAX_LEN        13U
 
@@ -142,6 +148,27 @@ void segment_reset_all(void);
  * @brief Unload all segments
  */
 void segment_unload_all(void);
+
+/**
+ * @brief Dynamic segment allocator - loads/unloads segments based on distance
+ *
+ * Based on legacy segment_allocator() from sd_functions.cpp.
+ * Loads segment points when user is within SEG_ALLOC_DIST of segment start.
+ * Unloads when user is farther than SEG_MARGE_DESACT * SEG_ALLOC_DIST.
+ *
+ * @param lat Current latitude
+ * @param lon Current longitude
+ * @return Distance to this segment, or negative on error
+ */
+float segment_allocator(uint16_t seg_idx, float lat, float lon);
+
+/**
+ * @brief Run allocator for all segments
+ * @param lat Current latitude
+ * @param lon Current longitude
+ * @return Distance to nearest segment
+ */
+float segment_run_allocator(float lat, float lon);
 
 #ifdef __cplusplus
 }

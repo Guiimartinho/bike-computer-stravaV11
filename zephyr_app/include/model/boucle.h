@@ -141,6 +141,45 @@ bool boucle_is_active(void);
  */
 app_err_t boucle_get_attitude(attitude_t *att);
 
+/**
+ * @brief Update HRM data from BLE
+ * @param bpm Heart rate in beats per minute
+ * @param connected true if HRM is connected
+ */
+void boucle_update_hrm(uint8_t bpm, bool connected);
+
+/**
+ * @brief Update BSC (speed/cadence) data from BLE
+ * @param cadence Cadence in RPM
+ * @param speed Speed in 0.01 km/h
+ * @param connected true if BSC is connected
+ */
+void boucle_update_bsc(uint8_t cadence, uint16_t speed, bool connected);
+
+/**
+ * @brief Get current suffer score
+ * @return Suffer score value
+ */
+float boucle_get_suffer_score(void);
+
+/**
+ * @brief Get current power zone
+ * @return Power zone index (0-6)
+ */
+uint8_t boucle_get_power_zone(void);
+
+/**
+ * @brief Get distance to nearest segment
+ * @return Distance in meters
+ */
+float boucle_get_dist_to_segment(void);
+
+/**
+ * @brief Set FTP (Functional Threshold Power)
+ * @param ftp FTP value in watts
+ */
+void boucle_set_ftp(uint16_t ftp);
+
 #ifdef __cplusplus
 }
 #endif
