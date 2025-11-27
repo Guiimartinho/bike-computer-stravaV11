@@ -33,6 +33,7 @@ target_include_directories(app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include/rf
     ${CMAKE_CURRENT_SOURCE_DIR}/include/vue
     ${CMAKE_CURRENT_SOURCE_DIR}/include/utils
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/usb
 )
 
 # =============================================================================
@@ -96,6 +97,7 @@ target_sources(app PRIVATE
     src/model/baro_drift.c
     src/model/loc_source.c
     src/model/sd_logger.c
+    src/model/zwift.c
 )
 
 # RF Layer - Wireless Communication
@@ -121,4 +123,10 @@ target_sources(app PRIVATE
 target_sources(app PRIVATE
     src/utils/utils.c
     src/utils/ring_buffer.c
+)
+
+# USB
+target_sources(app PRIVATE
+    src/usb/usb_cdc.c
+    src/usb/usb_msc.c
 )
