@@ -16,6 +16,8 @@
 #include "model/segment.h"
 #include "model/parcours.h"
 #include "drivers/gps_mgmt.h"
+#include "rf/ble_hrs_client.h"
+#include "rf/ble_bsc_client.h"
 
 LOG_MODULE_REGISTER(vue, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -644,6 +646,110 @@ static void draw_page_map(void)
 }
 
 /**
+ * @brief Draw a sensor status indicator box
+ */
+static void draw_sensor_box(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                            const char *name, bool connected, const char *value)
+{
+    /* Draw box */
+    draw_rect(x, y, w, h);
+
+    /* Connection indicator (filled circle if connected, empty if not) */
+    uint16_t ind_x = x + 8U;
+    uint16_t ind_y = y + (h / 2U);
+    if (connected) {
+        draw_filled_circle(ind_x, ind_y, 4U);
+    } else {
+        draw_circle(ind_x, ind_y, 4U);
+    }
+
+    /* Sensor name */
+    draw_string(x + 20U, y + 4U, name, 1U);
+
+    /* Value or status */
+    if (connected) {
+        draw_string(x + 20U, y + 18U, value, 2U);
+    } else {
+        draw_string(x + 20U, y + 18U, "--", 2U);
+    }
+}
+
+/**
+ * @brief Draw sensors status page
+ */
+static void draw_page_sensors(void)
+{
+    char buf[32];
+    uint16_t y = CONTENT_START_Y;
+
+    draw_string(100U, y, "SENSORS", 2U);
+    y += 30U;
+
+    /* Box dimensions */
+    uint16_t box_w = 180U;
+    uint16_t box_h = 45U;
+    uint16_t col1_x = 10U;
+    uint16_t col2_x = 200U;
+
+    /* Heart Rate Monitor */
+    bool hrs_conn = ble_hrs_client_is_connected();
+    uint8_t bpm = ble_hrs_client_get_bpm();
+    (void)snprintf(buf, sizeof(buf), "%u bpm", bpm);
+    draw_sensor_box(col1_x, y, box_w, box_h, "Heart Rate", hrs_conn, buf);
+
+    /* Speed/Cadence Sensor */
+    bool bsc_conn = ble_bsc_client_is_connected();
+    uint8_t cadence = ble_bsc_client_get_cadence();
+    (void)snprintf(buf, sizeof(buf), "%u rpm", cadence);
+    draw_sensor_box(col2_x, y, box_w, box_h, "Cadence", bsc_conn, buf);
+    y += box_h + 10U;
+
+    /* GPS Status */
+    gps_state_t gps_state = gps_mgmt_get_state();
+    bool gps_fix = (gps_state == GPS_STATE_FIX_2D) || (gps_state == GPS_STATE_FIX_3D);
+    gps_data_t gps;
+    if (gps_mgmt_get_data(&gps) == APP_OK) {
+        (void)snprintf(buf, sizeof(buf), "%u sats", gps.satellites);
+    } else {
+        (void)snprintf(buf, sizeof(buf), "---");
+    }
+    draw_sensor_box(col1_x, y, box_w, box_h, "GPS", gps_fix, buf);
+
+    /* Barometer (always connected if initialized) */
+    attitude_ext_t att_ext;
+    bool baro_ok = false;
+    if (attitude_get_ext(&att_ext) == APP_OK) {
+        baro_ok = (att_ext.pressure > 50000.0f);
+        (void)snprintf(buf, sizeof(buf), "%.0f hPa", (double)(att_ext.pressure / 100.0f));
+    } else {
+        (void)snprintf(buf, sizeof(buf), "---");
+    }
+    draw_sensor_box(col2_x, y, box_w, box_h, "Barometer", baro_ok, buf);
+    y += box_h + 10U;
+
+    /* Battery */
+    bool batt_ok = (att_ext.battery_soc > 0U);
+    (void)snprintf(buf, sizeof(buf), "%u%%", att_ext.battery_soc);
+    draw_sensor_box(col1_x, y, box_w, box_h, "Battery", batt_ok, buf);
+
+    /* Temperature */
+    bool temp_ok = (att_ext.temperature > -40.0f) && (att_ext.temperature < 85.0f);
+    (void)snprintf(buf, sizeof(buf), "%.1f C", (double)att_ext.temperature);
+    draw_sensor_box(col2_x, y, box_w, box_h, "Temperature", temp_ok, buf);
+    y += box_h + 15U;
+
+    /* Summary line */
+    uint8_t connected_count = 0U;
+    if (hrs_conn) { connected_count++; }
+    if (bsc_conn) { connected_count++; }
+    if (gps_fix) { connected_count++; }
+    if (baro_ok) { connected_count++; }
+
+    (void)snprintf(buf, sizeof(buf), "%u/4 sensors active", connected_count);
+    draw_string(120U, y, buf, 1U);
+}
+
+/**
  * @brief Draw debug info page
  */
 static void draw_page_debug(void)
@@ -807,6 +913,8 @@ void vue_update(void)
         draw_page_map();
         break;
     case VUE_PAGE_SENSORS:
+        draw_page_sensors();
+        break;
     case VUE_PAGE_MENU:
     default:
         draw_string(100U, 100U, "Page not implemented", 1U);
