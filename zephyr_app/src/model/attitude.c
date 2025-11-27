@@ -15,6 +15,7 @@
 #include "model/locator.h"
 #include "model/kalman_altitude.h"
 #include "model/crash_recovery.h"
+#include "model/user_settings.h"
 
 LOG_MODULE_REGISTER(attitude, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -29,7 +30,7 @@ LOG_MODULE_REGISTER(attitude, CONFIG_LOG_DEFAULT_LEVEL);
 #define MIN_SPEED_FOR_KALMAN    1.5f
 
 /** Power estimation constants */
-#define RIDER_WEIGHT_KG         75.0f
+#define DEFAULT_RIDER_WEIGHT_KG 75.0f
 #define BIKE_WEIGHT_KG          10.0f
 #define ROLLING_RESISTANCE      0.005f
 #define AIR_DENSITY             1.225f
@@ -97,6 +98,9 @@ static float altitude_correction;
 static bool is_initialized;
 static bool is_altitude_initialized;
 static bool has_sea_level_ref;
+
+/** User rider weight in kg (from settings) */
+static float rider_weight_kg;
 
 /* ==========================================================================
  * Private Functions
@@ -244,7 +248,14 @@ static void save_crash_recovery_state(void)
 }
 
 /**
- * @brief Estimate cycling power
+ * @brief Estimate cycling power using physics model
+ *
+ * Uses rider weight from user settings combined with bike weight
+ * to calculate power from rolling resistance, air drag, and gradient.
+ *
+ * @param speed_kmh Current speed in km/h
+ * @param slope Current gradient in percent
+ * @return Estimated power in watts
  */
 static uint16_t estimate_power(float speed_kmh, int8_t slope)
 {
@@ -253,16 +264,16 @@ static uint16_t estimate_power(float speed_kmh, int8_t slope)
     }
 
     float speed_ms = speed_kmh / 3.6f;
-    float total_mass = RIDER_WEIGHT_KG + BIKE_WEIGHT_KG;
+    float total_mass = rider_weight_kg + BIKE_WEIGHT_KG;
 
-    /* Rolling resistance power */
+    /* Rolling resistance power: P = Crr * m * g * v */
     float p_roll = ROLLING_RESISTANCE * total_mass * 9.81f * speed_ms;
 
-    /* Air resistance power */
+    /* Air resistance power: P = 0.5 * rho * CdA * v^3 */
     float p_air = 0.5f * AIR_DENSITY * DRAG_COEFF * FRONTAL_AREA *
                   speed_ms * speed_ms * speed_ms;
 
-    /* Gravity power (climbing/descending) */
+    /* Gravity power (climbing/descending): P = m * g * grade * v */
     float grade = (float)slope / 100.0f;
     float p_gravity = total_mass * 9.81f * grade * speed_ms;
 
@@ -317,6 +328,16 @@ app_err_t attitude_init(void)
 
     is_altitude_initialized = false;
     has_sea_level_ref = false;
+
+    /* Load rider weight from user settings (stored in hectograms) */
+    user_settings_t *settings = user_settings_get_global();
+    uint16_t weight_hg = user_settings_get_weight(settings);
+    if (weight_hg > 0U) {
+        rider_weight_kg = (float)weight_hg / 10.0f;
+    } else {
+        rider_weight_kg = DEFAULT_RIDER_WEIGHT_KG;
+    }
+    LOG_INF("Rider weight: %.1f kg", (double)rider_weight_kg);
 
     /* Check for crash recovery data */
     if (crash_recovery_has_data()) {
@@ -574,6 +595,14 @@ float attitude_get_avg_speed(void)
 uint16_t attitude_get_power(void)
 {
     return current_att.pwr;
+}
+
+void attitude_set_rider_weight(float weight_kg)
+{
+    if (weight_kg > 20.0f && weight_kg < 200.0f) {
+        rider_weight_kg = weight_kg;
+        LOG_INF("Rider weight updated: %.1f kg", (double)rider_weight_kg);
+    }
 }
 
 void attitude_reset(void)

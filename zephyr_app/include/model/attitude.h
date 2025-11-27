@@ -147,6 +147,16 @@ float attitude_get_avg_speed(void);
 uint16_t attitude_get_power(void);
 
 /**
+ * @brief Set rider weight for power estimation
+ *
+ * Updates the rider weight used in power calculations.
+ * Call this when user settings change.
+ *
+ * @param weight_kg Rider weight in kilograms
+ */
+void attitude_set_rider_weight(float weight_kg);
+
+/**
  * @brief Reset attitude state
  */
 void attitude_reset(void);
