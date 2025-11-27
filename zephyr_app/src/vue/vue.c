@@ -10,6 +10,7 @@
 #include <math.h>
 
 #include "vue/vue.h"
+#include "vue/menu.h"
 #include "drivers/ls027.h"
 #include "model/boucle.h"
 #include "model/attitude.h"
@@ -18,6 +19,7 @@
 #include "drivers/gps_mgmt.h"
 #include "rf/ble_hrs_client.h"
 #include "rf/ble_bsc_client.h"
+#include "model/user_settings.h"
 
 LOG_MODULE_REGISTER(vue, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -750,6 +752,98 @@ static void draw_page_sensors(void)
 }
 
 /**
+ * @brief Draw menu page
+ */
+static void draw_page_menu(void)
+{
+    const menu_state_t *mstate = menu_get_state();
+    char buf[32];
+    uint16_t y = CONTENT_START_Y;
+
+    /* Title based on depth */
+    if (mstate->depth == 0U) {
+        draw_string(140U, y, "MENU", 2U);
+    } else {
+        draw_string(100U, y, "SETTINGS", 2U);
+    }
+    y += 28U;
+
+    draw_hline(20U, y, LS027_WIDTH - 40U);
+    y += 8U;
+
+    if (mstate->current_menu == NULL) {
+        draw_string(100U, y + 40U, "Menu not available", 1U);
+        return;
+    }
+
+    /* Draw visible menu items */
+    uint8_t visible_count = 5U;
+    uint16_t item_height = 32U;
+
+    for (uint8_t i = 0U; i < visible_count; i++) {
+        uint8_t item_idx = mstate->scroll_offset + i;
+        if (item_idx >= mstate->menu_count) {
+            break;
+        }
+
+        const menu_item_t *item = &mstate->current_menu[item_idx];
+        uint16_t item_y = y + (i * item_height);
+
+        /* Selection highlight */
+        if (item_idx == mstate->selected_index) {
+            ls027_fill_rect(15U, item_y, LS027_WIDTH - 30U, item_height - 2U, LS027_COLOR_BLACK);
+            /* Draw text inverted (white on black) - simplified */
+            /* For now just draw indicator */
+            draw_string(20U, item_y + 8U, ">", 2U);
+        }
+
+        /* Item name */
+        uint16_t text_x = (item_idx == mstate->selected_index) ? 45U : 30U;
+        draw_string(text_x, item_y + 8U, item->name, 1U);
+
+        /* Type indicator / value */
+        if (item->type == MENU_TYPE_SUBMENU) {
+            draw_string(LS027_WIDTH - 50U, item_y + 8U, ">", 2U);
+        } else if (item->type == MENU_TYPE_VALUE) {
+            uint16_t val;
+            if (mstate->editing_value && (item_idx == mstate->selected_index)) {
+                val = menu_get_edit_value();
+                /* Show editing indicator */
+                (void)snprintf(buf, sizeof(buf), "[%u]", val);
+            } else {
+                /* Show current value */
+                if (strstr(item->name, "FTP") != NULL) {
+                    val = user_settings_get_ftp(user_settings_get_global());
+                } else if (strstr(item->name, "Weight") != NULL) {
+                    val = user_settings_get_weight(user_settings_get_global());
+                    /* Convert hectograms to kg with decimal */
+                    (void)snprintf(buf, sizeof(buf), "%.1f", (double)val / 10.0);
+                } else {
+                    val = 0U;
+                    (void)snprintf(buf, sizeof(buf), "%u", val);
+                }
+                if (strstr(item->name, "Weight") == NULL) {
+                    (void)snprintf(buf, sizeof(buf), "%u", val);
+                }
+            }
+            draw_string(LS027_WIDTH - 80U, item_y + 8U, buf, 1U);
+        }
+    }
+
+    /* Scroll indicators */
+    if (mstate->scroll_offset > 0U) {
+        draw_string(LS027_WIDTH / 2U - 5U, CONTENT_START_Y + 20U, "^", 1U);
+    }
+    if ((mstate->scroll_offset + visible_count) < mstate->menu_count) {
+        draw_string(LS027_WIDTH / 2U - 5U, y + (visible_count * item_height), "v", 1U);
+    }
+
+    /* Instructions at bottom */
+    y = LS027_HEIGHT - 20U;
+    draw_string(20U, y, "L/R:Navigate  C:Select  Long:Back", 1U);
+}
+
+/**
  * @brief Draw debug info page
  */
 static void draw_page_debug(void)
@@ -916,8 +1010,10 @@ void vue_update(void)
         draw_page_sensors();
         break;
     case VUE_PAGE_MENU:
+        draw_page_menu();
+        break;
     default:
-        draw_string(100U, 100U, "Page not implemented", 1U);
+        draw_string(100U, 100U, "Unknown page", 1U);
         break;
     }
 
