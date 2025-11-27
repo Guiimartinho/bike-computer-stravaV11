@@ -7,6 +7,7 @@
 #include <zephyr/logging/log.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include "vue/vue.h"
 #include "drivers/ls027.h"
@@ -458,6 +459,191 @@ static void draw_page_gps(void)
 }
 
 /**
+ * @brief Draw line using Bresenham's algorithm
+ */
+static void draw_line(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
+{
+    int16_t dx = (int16_t)((x1 > x0) ? (x1 - x0) : (x0 - x1));
+    int16_t dy = (int16_t)((y1 > y0) ? (y1 - y0) : (y0 - y1));
+    int16_t sx = (x0 < x1) ? 1 : -1;
+    int16_t sy = (y0 < y1) ? 1 : -1;
+    int16_t err = dx - dy;
+    int16_t x = (int16_t)x0;
+    int16_t y = (int16_t)y0;
+
+    while (true) {
+        if ((x >= 0) && (x < (int16_t)LS027_WIDTH) &&
+            (y >= 0) && (y < (int16_t)LS027_HEIGHT)) {
+            ls027_draw_pixel((uint16_t)x, (uint16_t)y, LS027_COLOR_BLACK);
+        }
+
+        if ((x == (int16_t)x1) && (y == (int16_t)y1)) {
+            break;
+        }
+
+        int16_t e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y += sy;
+        }
+    }
+}
+
+/**
+ * @brief Draw a simple filled circle (for map markers)
+ */
+static void draw_filled_circle(uint16_t cx, uint16_t cy, uint16_t r)
+{
+    for (int16_t y = -(int16_t)r; y <= (int16_t)r; y++) {
+        for (int16_t x = -(int16_t)r; x <= (int16_t)r; x++) {
+            if ((x * x + y * y) <= (int16_t)(r * r)) {
+                uint16_t px = (uint16_t)((int16_t)cx + x);
+                uint16_t py = (uint16_t)((int16_t)cy + y);
+                if ((px < LS027_WIDTH) && (py < LS027_HEIGHT)) {
+                    ls027_draw_pixel(px, py, LS027_COLOR_BLACK);
+                }
+            }
+        }
+    }
+}
+
+/**
+ * @brief Draw a circle outline
+ */
+static void draw_circle(uint16_t cx, uint16_t cy, uint16_t r)
+{
+    int16_t x = (int16_t)r;
+    int16_t y = 0;
+    int16_t err = 0;
+
+    while (x >= y) {
+        ls027_draw_pixel(cx + (uint16_t)x, cy + (uint16_t)y, LS027_COLOR_BLACK);
+        ls027_draw_pixel(cx + (uint16_t)y, cy + (uint16_t)x, LS027_COLOR_BLACK);
+        ls027_draw_pixel(cx - (uint16_t)x, cy + (uint16_t)y, LS027_COLOR_BLACK);
+        ls027_draw_pixel(cx - (uint16_t)y, cy + (uint16_t)x, LS027_COLOR_BLACK);
+        ls027_draw_pixel(cx - (uint16_t)x, cy - (uint16_t)y, LS027_COLOR_BLACK);
+        ls027_draw_pixel(cx - (uint16_t)y, cy - (uint16_t)x, LS027_COLOR_BLACK);
+        ls027_draw_pixel(cx + (uint16_t)x, cy - (uint16_t)y, LS027_COLOR_BLACK);
+        ls027_draw_pixel(cx + (uint16_t)y, cy - (uint16_t)x, LS027_COLOR_BLACK);
+
+        y++;
+        if (err <= 0) {
+            err += 2 * y + 1;
+        }
+        if (err > 0) {
+            x--;
+            err -= 2 * x + 1;
+        }
+    }
+}
+
+/**
+ * @brief Draw compass arrow pointing in direction
+ */
+static void draw_compass_arrow(uint16_t cx, uint16_t cy, uint16_t len, float bearing_deg)
+{
+    /* Convert bearing to radians, adjust for screen coords (0=up, CW positive) */
+    float rad = (bearing_deg - 90.0f) * 3.14159265f / 180.0f;
+
+    /* Arrow tip */
+    int16_t tip_x = (int16_t)cx + (int16_t)((float)len * cosf(rad));
+    int16_t tip_y = (int16_t)cy + (int16_t)((float)len * sinf(rad));
+
+    /* Arrow base (opposite direction) */
+    int16_t base_x = (int16_t)cx - (int16_t)(((float)len / 3.0f) * cosf(rad));
+    int16_t base_y = (int16_t)cy - (int16_t)(((float)len / 3.0f) * sinf(rad));
+
+    /* Draw arrow line */
+    draw_line((uint16_t)base_x, (uint16_t)base_y,
+              (uint16_t)tip_x, (uint16_t)tip_y);
+
+    /* Draw arrowhead */
+    float head_angle = 0.5f;  /* radians offset for head */
+    int16_t h1_x = tip_x - (int16_t)(10.0f * cosf(rad - head_angle));
+    int16_t h1_y = tip_y - (int16_t)(10.0f * sinf(rad - head_angle));
+    int16_t h2_x = tip_x - (int16_t)(10.0f * cosf(rad + head_angle));
+    int16_t h2_y = tip_y - (int16_t)(10.0f * sinf(rad + head_angle));
+
+    draw_line((uint16_t)tip_x, (uint16_t)tip_y, (uint16_t)h1_x, (uint16_t)h1_y);
+    draw_line((uint16_t)tip_x, (uint16_t)tip_y, (uint16_t)h2_x, (uint16_t)h2_y);
+}
+
+/**
+ * @brief Draw map page with position and nearby info
+ */
+static void draw_page_map(void)
+{
+    attitude_t att;
+    char buf[32];
+
+    uint16_t y = CONTENT_START_Y;
+
+    draw_string(130U, y, "MAP VIEW", 2U);
+    y += 28U;
+
+    if (attitude_get(&att) != APP_OK) {
+        draw_string(80U, 100U, "No position data", 1U);
+        return;
+    }
+
+    /* Map area - center of screen */
+    uint16_t map_cx = LS027_WIDTH / 2U;
+    uint16_t map_cy = 120U;
+    uint16_t map_radius = 70U;
+
+    /* Draw map boundary circle */
+    draw_circle(map_cx, map_cy, map_radius);
+    draw_circle(map_cx, map_cy, map_radius + 1U);
+
+    /* Draw current position marker (center) */
+    draw_filled_circle(map_cx, map_cy, 6U);
+
+    /* Draw course/heading arrow if moving */
+    if (att.loc.speed > 2.0f) {
+        draw_compass_arrow(map_cx, map_cy, 50U, att.loc.course);
+    }
+
+    /* Draw cardinal directions */
+    draw_string(map_cx - 3U, map_cy - map_radius - 12U, "N", 1U);
+    draw_string(map_cx - 3U, map_cy + map_radius + 4U, "S", 1U);
+    draw_string(map_cx - map_radius - 10U, map_cy - 4U, "W", 1U);
+    draw_string(map_cx + map_radius + 4U, map_cy - 4U, "E", 1U);
+
+    /* Info below map */
+    y = map_cy + map_radius + 25U;
+
+    /* Coordinates */
+    (void)snprintf(buf, sizeof(buf), "%.5f, %.5f",
+                   (double)att.loc.lat, (double)att.loc.lon);
+    draw_string(60U, y, buf, 1U);
+    y += 14U;
+
+    /* Altitude */
+    (void)snprintf(buf, sizeof(buf), "Alt: %.0f m", (double)att.loc.alt);
+    draw_string(20U, y, buf, 1U);
+
+    /* Speed */
+    (void)snprintf(buf, sizeof(buf), "%.1f km/h", (double)att.loc.speed);
+    draw_string(180U, y, buf, 1U);
+    y += 14U;
+
+    /* Course */
+    (void)snprintf(buf, sizeof(buf), "Course: %.0f", (double)att.loc.course);
+    draw_string(20U, y, buf, 1U);
+
+    /* Distance to nearest segment */
+    float seg_dist = segment_get_nearest_distance();
+    if (seg_dist >= 0.0f) {
+        (void)snprintf(buf, sizeof(buf), "Seg: %.0fm", (double)seg_dist);
+        draw_string(180U, y, buf, 1U);
+    }
+}
+
+/**
  * @brief Draw debug info page
  */
 static void draw_page_debug(void)
@@ -618,6 +804,8 @@ void vue_update(void)
         draw_page_debug();
         break;
     case VUE_PAGE_MAP:
+        draw_page_map();
+        break;
     case VUE_PAGE_SENSORS:
     case VUE_PAGE_MENU:
     default:
