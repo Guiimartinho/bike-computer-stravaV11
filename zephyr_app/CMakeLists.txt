@@ -68,6 +68,7 @@ target_sources(app PRIVATE
 target_sources(app PRIVATE
     src/drivers/gps/gps_mgmt.c
     src/drivers/gps/nmea_parser.c
+    src/drivers/gps/gps_epo.c
 )
 
 # Drivers - NeoPixel

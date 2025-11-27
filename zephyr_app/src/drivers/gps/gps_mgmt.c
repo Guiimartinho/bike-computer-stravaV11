@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 #include "drivers/gps_mgmt.h"
+#include "drivers/gps_epo.h"
 #include "drivers/nmea_parser.h"
 #include "hal/hal_uart.h"
 #include "hal/hal_gpio.h"
@@ -487,30 +488,45 @@ app_err_t gps_mgmt_host_aiding(const loc_data_t *loc, const date_data_t *date)
 
 app_err_t gps_mgmt_start_epo(const uint8_t *epo_data, uint32_t epo_size)
 {
+    (void)epo_data;  /* Not used - EPO reads from SD card */
+    (void)epo_size;
+
     if (!is_initialized) {
         return APP_ERR_NOT_INIT;
     }
 
-    if ((epo_data == NULL) || (epo_size == 0U)) {
-        return APP_ERR_INVALID_PARAM;
+    /* Calculate current GPS hour from latest datetime */
+    uint32_t gps_hour = 0U;
+    if ((nmea_data.year > 0U) && (nmea_data.month > 0U)) {
+        /* Convert NMEA date to date_data format: DDMMYY */
+        uint32_t date_val = ((uint32_t)nmea_data.day * 10000U) +
+                           ((uint32_t)nmea_data.month * 100U) +
+                           ((uint32_t)(nmea_data.year % 100U));
+
+        /* Convert time to seconds of day */
+        uint32_t secj = ((uint32_t)nmea_data.hour * 3600U) +
+                        ((uint32_t)nmea_data.minute * 60U) +
+                        (uint32_t)nmea_data.second;
+
+        date_data_t date = {
+            .date = date_val,
+            .secj = secj,
+            .timestamp = k_uptime_get_32()
+        };
+        gps_hour = gps_epo_calc_gps_hour(&date);
     }
 
-    /* EPO transfer is module-specific and typically requires
-     * a binary protocol. This is a placeholder for the MediaTek
-     * EPO upload sequence which would involve:
-     * 1. Send PMTK253 to enable EPO function
-     * 2. Send EPO data in binary format
-     * 3. Wait for ACK
-     */
+    /* Start EPO transfer from SD card */
+    app_err_t err = gps_epo_start_transfer(gps_hour);
+    if (err == APP_OK) {
+        epo_state = GPS_EPO_RUNNING;
+        LOG_INF("EPO transfer started from SD card");
+    } else {
+        epo_state = GPS_EPO_END;
+        LOG_WRN("EPO transfer failed: %d", err);
+    }
 
-    epo_state = GPS_EPO_START;
-    LOG_INF("EPO transfer started (%u bytes)", (unsigned)epo_size);
-
-    /* For now, just indicate EPO is not supported in this build */
-    LOG_WRN("EPO binary transfer not implemented");
-    epo_state = GPS_EPO_END;
-
-    return APP_ERR_NOT_INIT; /* Indicate not fully implemented */
+    return err;
 }
 
 gps_epo_state_t gps_mgmt_get_epo_state(void)
