@@ -19,6 +19,7 @@
 #include "rf/ble_lns.h"
 #include "rf/ble_hrs_client.h"
 #include "rf/ble_bsc_client.h"
+#include "rf/ble_fec_client.h"
 #include "rf/ble_komoot_client.h"
 
 LOG_MODULE_REGISTER(ble_mgr, CONFIG_LOG_DEFAULT_LEVEL);
@@ -43,10 +44,12 @@ LOG_MODULE_REGISTER(ble_mgr, CONFIG_LOG_DEFAULT_LEVEL);
 
 /** Service UUIDs for filtering (use Zephyr's BT_UUID_HRS_VAL) */
 #define BT_UUID_CSC_VAL     0x1816
+#define BT_UUID_FTMS_VAL    0x1826
 
 /** Sensor type flags */
 #define SENSOR_TYPE_HRS     0x01U
 #define SENSOR_TYPE_BSC     0x02U
+#define SENSOR_TYPE_FEC     0x04U
 
 /* ==========================================================================
  * Private Variables
@@ -63,6 +66,9 @@ static struct bt_conn *hrs_conn;
 
 /** BSC sensor connection */
 static struct bt_conn *bsc_conn;
+
+/** FEC trainer connection */
+static struct bt_conn *fec_conn;
 
 /** Connection info */
 static ble_conn_info_t conn_info;
@@ -158,6 +164,14 @@ static uint8_t detect_sensor_type(const uint8_t *ad_data, uint8_t ad_len)
         sensor_type |= SENSOR_TYPE_BSC;
     }
 
+    /* Reset buffer and check for FTMS (FEC) */
+    net_buf_simple_init_with_data(&buf, (uint8_t *)ad_data, ad_len);
+    uuid = BT_UUID_FTMS_VAL;
+    bt_data_parse(&buf, ad_contains_uuid16, &uuid);
+    if (uuid == 0U) {
+        sensor_type |= SENSOR_TYPE_FEC;
+    }
+
     return sensor_type;
 }
 
@@ -176,6 +190,10 @@ static void connect_to_sensor(const bt_addr_le_t *addr, uint8_t sensor_type)
     }
     if (((sensor_type & SENSOR_TYPE_BSC) != 0U) && (bsc_conn != NULL)) {
         LOG_DBG("BSC already connected");
+        return;
+    }
+    if (((sensor_type & SENSOR_TYPE_FEC) != 0U) && (fec_conn != NULL)) {
+        LOG_DBG("FEC already connected");
         return;
     }
 
@@ -300,9 +318,14 @@ static void connected(struct bt_conn *conn, uint8_t err)
             ble_bsc_client_on_connect(conn);
             LOG_INF("BSC sensor connected");
         }
+        if ((sensor_type & SENSOR_TYPE_FEC) != 0U) {
+            fec_conn = bt_conn_ref(conn);
+            ble_fec_client_on_connect(conn);
+            LOG_INF("FEC trainer connected");
+        }
 
         /* Resume scanning for other sensors */
-        if ((hrs_conn == NULL) || (bsc_conn == NULL)) {
+        if ((hrs_conn == NULL) || (bsc_conn == NULL) || (fec_conn == NULL)) {
             (void)ble_manager_start_scan();
         }
     } else {
@@ -350,6 +373,13 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
         bt_conn_unref(bsc_conn);
         bsc_conn = NULL;
         LOG_INF("BSC sensor disconnected");
+        /* Resume scanning to reconnect */
+        (void)ble_manager_start_scan();
+    } else if (conn == fec_conn) {
+        ble_fec_client_on_disconnect(conn);
+        bt_conn_unref(fec_conn);
+        fec_conn = NULL;
+        LOG_INF("FEC trainer disconnected");
         /* Resume scanning to reconnect */
         (void)ble_manager_start_scan();
     }
@@ -406,6 +436,11 @@ app_err_t ble_manager_init(void)
     err = ble_bsc_client_init();
     if ((err != APP_OK) && (err != APP_ERR_ALREADY_INIT)) {
         LOG_WRN("BSC client init failed: %d", err);
+    }
+
+    err = ble_fec_client_init();
+    if ((err != APP_OK) && (err != APP_ERR_ALREADY_INIT)) {
+        LOG_WRN("FEC client init failed: %d", err);
     }
 
     err = ble_komoot_client_init();
@@ -494,7 +529,7 @@ app_err_t ble_manager_start_scan(void)
     }
 
     /* Check if we need more sensors */
-    if ((hrs_conn != NULL) && (bsc_conn != NULL)) {
+    if ((hrs_conn != NULL) && (bsc_conn != NULL) && (fec_conn != NULL)) {
         LOG_INF("All sensors connected, not scanning");
         return APP_OK;
     }

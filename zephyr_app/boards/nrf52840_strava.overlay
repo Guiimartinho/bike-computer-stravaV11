@@ -94,6 +94,11 @@
     };
 };
 
+/* Disable I2C1 (conflicts with SPI1) */
+&i2c1 {
+    status = "disabled";
+};
+
 /* I2C0 - Sensors (Barometer, IMU, Fuel Gauge) */
 &i2c0 {
     compatible = "nordic,nrf-twi";
